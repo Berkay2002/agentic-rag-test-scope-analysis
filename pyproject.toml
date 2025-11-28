@@ -1,0 +1,56 @@
+[tool.poetry]
+name = "agrag"
+version = "0.1.0"
+description = "Agentic GraphRAG System for Test Scope Analysis"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "agrag", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+langchain = "^0.3.0"
+langchain-google-genai = "^2.0.0"
+langgraph = "^0.2.0"
+langgraph-checkpoint-postgres = "^2.0.0"
+langsmith = "^0.2.0"
+neo4j = "^5.20.0"
+psycopg = {extras = ["binary"], version = "^3.2.0"}
+pgvector = "^0.3.0"
+pydantic = "^2.8.0"
+pydantic-settings = "^2.0.0"
+tree-sitter = "^0.21.0"
+numpy = "^1.26.0"
+scipy = "^1.13.0"
+click = "^8.1.0"
+rich = "^13.7.0"
+prompt-toolkit = "^3.0.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+black = "^24.0.0"
+ruff = "^0.5.0"
+jupyter = "^1.0.0"
+matplotlib = "^3.8.0"
+pandas = "^2.2.0"
+
+[tool.poetry.scripts]
+agrag = "agrag.cli.main:cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
