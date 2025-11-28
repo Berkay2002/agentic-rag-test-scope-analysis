@@ -3,7 +3,9 @@
 import click
 import logging
 import sys
+import json
 from typing import Optional
+from pathlib import Path
 
 from agrag.config import setup_logging, settings
 from agrag.storage import Neo4jClient, PostgresClient
@@ -292,5 +294,149 @@ def info():
     click.echo("")
 
 
+@cli.command()
+@click.confirmation_option(
+    prompt="Are you sure you want to delete ALL data from both databases?"
+)
+def reset():
+    """Delete all data from Neo4j and PostgreSQL databases.
+    
+    WARNING: This will permanently delete all entities, relationships,
+    and embeddings. This action cannot be undone.
+    
+    Use this before ingesting a new dataset to avoid duplicates.
+    """
+    click.echo("\n=== Resetting Databases ===\n")
+
+    try:
+        # Clear Neo4j
+        click.echo("[Neo4j] Deleting all nodes and relationships...")
+        neo4j_client = Neo4jClient()
+        neo4j_count = neo4j_client.delete_all()
+        click.echo(f"[Neo4j] ✓ Deleted {neo4j_count} nodes and their relationships")
+
+        # Clear PostgreSQL
+        click.echo("\n[PostgreSQL] Deleting all document chunks...")
+        postgres_client = PostgresClient()
+        postgres_count = postgres_client.delete_all_chunks()
+        click.echo(f"[PostgreSQL] ✓ Deleted {postgres_count} document chunks")
+
+        click.echo("\n✓ Databases reset successfully!")
+        click.echo("\nNext step: agrag ingest <dataset.json>")
+
+    except Exception as e:
+        click.echo(f"\n✗ Reset failed: {e}", err=True)
+        logger.exception("Database reset failed")
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--requirements", default=50, help="Number of requirements to generate")
+@click.option("--testcases", default=200, help="Number of test cases to generate")
+@click.option("--output", default="data/synthetic_dataset.json", help="Output file path")
+def generate(requirements: int, testcases: int, output: str):
+    """Generate synthetic telecommunications dataset.
+    
+    Creates realistic synthetic data including requirements, test cases,
+    functions, classes, modules, and their relationships.
+    
+    Examples:
+      agrag generate
+      agrag generate --requirements 30 --testcases 150
+      agrag generate --output my_dataset.json
+    """
+    from agrag.data.generators import TelecomDataGenerator
+
+    click.echo(f"\n=== Generating Synthetic Dataset ===\n")
+    click.echo(f"Requirements: {requirements}")
+    click.echo(f"Test cases: {testcases}")
+    click.echo(f"Output: {output}\n")
+
+    try:
+        # Create generator
+        generator = TelecomDataGenerator()
+        
+        # Generate dataset
+        click.echo("Generating entities (this may take a few minutes)...")
+        dataset = generator.generate_full_dataset(
+            requirement_count=requirements,
+            testcase_count=testcases
+        )
+
+        # Create output directory if needed
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save to JSON
+        with open(output, "w") as f:
+            json.dump(dataset, f, indent=2)
+
+        # Display summary
+        metadata = dataset.get("metadata", {})
+        click.echo(f"\n✓ Dataset generated successfully!")
+        click.echo(f"\nSummary:")
+        click.echo(f"  Requirements: {metadata.get('requirement_count', 0)}")
+        click.echo(f"  Test cases: {metadata.get('testcase_count', 0)}")
+        click.echo(f"  Functions: {metadata.get('function_count', 0)}")
+        click.echo(f"  Classes: {metadata.get('class_count', 0)}")
+        click.echo(f"  Modules: {metadata.get('module_count', 0)}")
+        click.echo(f"  Relationships: {metadata.get('relationship_count', 0)}")
+        click.echo(f"\nSaved to: {output}")
+        click.echo(f"\nNext step: agrag ingest {output}")
+
+    except Exception as e:
+        click.echo(f"\n✗ Generation failed: {e}", err=True)
+        logger.exception("Dataset generation failed")
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("dataset_path")
+def ingest(dataset_path: str):
+    """Ingest dataset into Neo4j and PostgreSQL.
+    
+    Loads a previously generated synthetic dataset into both databases.
+    The dataset should be a JSON file created by the 'generate' command.
+    
+    Examples:
+      agrag ingest data/synthetic_dataset.json
+    """
+    from agrag.data.ingestion import DataIngestion
+
+    click.echo(f"\n=== Ingesting Dataset ===\n")
+    click.echo(f"Dataset: {dataset_path}\n")
+
+    try:
+        # Load dataset
+        click.echo("Loading dataset from file...")
+        with open(dataset_path) as f:
+            dataset = json.load(f)
+
+        entities_count = len(dataset.get("entities", []))
+        relationships_count = len(dataset.get("relationships", []))
+        
+        click.echo(f"Loaded {entities_count} entities and {relationships_count} relationships\n")
+
+        # Ingest data
+        click.echo("Starting ingestion (this may take a few minutes)...\n")
+        ingestion = DataIngestion()
+        results = ingestion.ingest_full_dataset(dataset)
+
+        # Display results
+        click.echo(f"\n✓ Ingestion complete!")
+        click.echo(f"\nResults:")
+        click.echo(f"  Neo4j entities: {results['neo4j_entities']}")
+        click.echo(f"  PostgreSQL entities: {results['postgres_entities']}")
+        click.echo(f"  Relationships: {results['relationships']}")
+        
+        click.echo(f"\nNext step: agrag query \"What tests cover handover requirements?\"")
+
+    except Exception as e:
+        click.echo(f"\n✗ Ingestion failed: {e}", err=True)
+        logger.exception("Data ingestion failed")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
+
