@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     google_model: str = "gemini-2.0-flash-exp"
     google_embedding_model: str = "models/text-embedding-004"
     embedding_dimensions: int = 768
+    llm_timeout_seconds: int = 45
 
     # Neo4j Configuration
     neo4j_uri: Optional[str] = None

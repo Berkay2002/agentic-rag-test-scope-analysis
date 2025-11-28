@@ -2,11 +2,13 @@
 
 import logging
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from agrag.core.state import AgentState
 from agrag.models import get_llm
+from agrag.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,28 @@ def call_model(state: AgentState, tools: List[BaseTool]) -> dict:
     llm = get_llm()
     llm_with_tools = llm.bind_tools(tools)
 
-    # Call model with message history
-    response = llm_with_tools.invoke(state["messages"])
+    timeout = settings.llm_timeout_seconds
+
+    def _invoke():
+        return llm_with_tools.invoke(state["messages"])
+
+    if timeout and timeout > 0:
+        logger.info("Invoking LLM with timeout=%ss", timeout)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_invoke)
+            try:
+                response = future.result(timeout=timeout)
+            except FuturesTimeoutError as exc:
+                future.cancel()
+                logger.error(
+                    "LLM call exceeded timeout (%ss). Check connectivity or reduce workload.",
+                    timeout,
+                )
+                raise TimeoutError(
+                    f"LLM call timed out after {timeout}s. Verify GOOGLE_API_KEY connectivity."
+                ) from exc
+    else:
+        response = _invoke()
 
     # Increment model call counter
     model_call_count = state.get("model_call_count", 0) + 1

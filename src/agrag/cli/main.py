@@ -10,6 +10,7 @@ from pathlib import Path
 from agrag.config import setup_logging, settings
 from agrag.storage import Neo4jClient, PostgresClient
 from agrag.core import create_agent_graph, create_initial_state
+from agrag.core.checkpointing import initialize_checkpointer, summarize_error
 from agrag.kg.ontology import NEO4J_CONSTRAINTS, NEO4J_VECTOR_INDEXES, POSTGRESQL_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,51 @@ def init():
 
 
 @cli.command()
+@click.option(
+    "--thread-id",
+    type=str,
+    default=None,
+    help="Thread ID to resume a previous conversation (auto-generated if not provided)",
+)
+@click.option(
+    "--yolo/--no-yolo",
+    default=False,
+    help="Disable approvals - agent executes autonomously (YOLO mode)",
+)
+def chat(
+    thread_id: Optional[str],
+    yolo: bool,
+):
+    """Start an interactive chat session with the agent.
+
+    This provides a conversational interface similar to Claude Code, Copilot CLI, etc.
+    You can ask questions naturally and the agent will respond using the appropriate tools.
+
+    All conversations are automatically saved and can be resumed later using --thread-id.
+
+    Safety: By default, you approve each tool execution (HITL mode).
+      - Default: Agent asks for approval before each tool (safe, you control everything)
+      - --yolo: Agent executes autonomously without asking (faster but uncontrolled)
+
+    Examples:
+      agrag chat                           # Safe mode - you approve each action
+      agrag chat --thread-id my-session    # Resume previous chat (with approvals)
+      agrag chat --yolo                    # YOLO mode - autonomous execution
+    """
+    from agrag.cli.interactive import start_interactive_chat
+
+    try:
+        start_interactive_chat(
+            thread_id=thread_id,
+            enable_hitl=not yolo,  # HITL is enabled unless YOLO mode
+        )
+    except Exception as e:
+        click.echo(f"\n✗ Chat failed: {e}", err=True)
+        logger.exception("Interactive chat failed")
+        sys.exit(1)
+
+
+@cli.command()
 @click.argument("query_text")
 @click.option(
     "--thread-id",
@@ -91,7 +137,7 @@ def query(
     checkpoint: bool,
     stream: bool,
 ):
-    """Run a query against the GraphRAG system.
+    """Run a single query against the GraphRAG system.
 
     Examples:
       agrag query "What tests cover requirement REQ_AUTH_005?"
@@ -106,17 +152,34 @@ def query(
         config = {}
 
         if checkpoint:
-            from langgraph.checkpoint.postgres import PostgresSaver
-            import psycopg
+            click.echo("[Checkpointer] Enabling HITL persistence...")
+            init_result = initialize_checkpointer(enable_hitl=True)
+            checkpointer = init_result.checkpointer
 
-            click.echo("[Checkpointer] Enabling PostgresSaver for HITL...")
-            conn = psycopg.connect(settings.postgres_connection_string)
-            checkpointer = PostgresSaver(conn)
-            checkpointer.setup()
+            if checkpointer:
+                backend_label = (
+                    "PostgreSQL"
+                    if init_result.backend == "postgres"
+                    else "in-memory (session only)"
+                )
+                click.echo(f"[Checkpointer] Using {backend_label} backend.")
 
-            if thread_id:
-                config["configurable"] = {"thread_id": thread_id}
-                click.echo(f"[Thread] Using thread_id: {thread_id}")
+                if init_result.backend == "memory" and init_result.error:
+                    click.echo(
+                        f"[Checkpointer] Postgres unavailable: {summarize_error(init_result.error)}"
+                    )
+
+                if thread_id:
+                    config["configurable"] = {"thread_id": thread_id}
+                    click.echo(f"[Thread] Using thread_id: {thread_id}")
+            else:
+                click.echo(
+                    "[Checkpointer] Persistence unavailable; continuing without HITL approvals."
+                )
+                if thread_id:
+                    click.echo(
+                        "[Thread] thread_id ignored because no checkpointer is active."
+                    )
 
         # Create graph
         graph = create_agent_graph(checkpointer=checkpointer)
@@ -157,6 +220,10 @@ def query(
         click.echo(f"Tool calls: {final_state.get('tool_call_count', 0)}")
         click.echo(f"Model calls: {final_state.get('model_call_count', 0)}")
 
+    except TimeoutError as e:
+        click.echo(f"\n✗ Query timed out: {e}", err=True)
+        logger.exception("Query execution timed out")
+        sys.exit(1)
     except Exception as e:
         click.echo(f"\n✗ Query failed: {e}", err=True)
         logger.exception("Query execution failed")
@@ -439,4 +506,3 @@ def ingest(dataset_path: str):
 
 if __name__ == "__main__":
     cli()
-

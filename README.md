@@ -98,9 +98,47 @@ See `.env.example` for all configuration options. Key settings:
 
 ### CLI Commands
 
+#### Interactive Chat (Recommended)
+```bash
+# Start interactive chat mode (like Claude Code, Copilot CLI)
+# Safe by default - you approve each tool before execution
+poetry run agrag chat
+
+# Resume a previous conversation
+poetry run agrag chat --thread-id my-session
+
+# YOLO mode - autonomous execution without approvals (use with caution)
+poetry run agrag chat --yolo
+```
+
+The interactive chat mode provides a conversational interface with:
+- Natural language conversation
+- **Automatic conversation persistence** (resume anytime)
+- Real-time streaming responses with progress indicators
+- Built-in commands (`/help`, `/stats`, `/exit`, etc.)
+- **Safe by default** - you approve each tool execution (HITL mode)
+
+**Modes:**
+- **Default (Safe Mode)**: Agent asks for approval before each tool execution
+  - ✅ You control everything, safer, better for learning
+  - Best for: normal usage, exploring, sensitive data
+  
+- **YOLO Mode** (`--yolo`): Agent executes autonomously without asking
+  - ⚡ Faster but uncontrolled
+  - Best for: trusted workflows, demos, when you're confident
+
+**Available chat commands:**
+- `/help` - Show help
+- `/clear` - Clear screen
+- `/history` - View conversation history
+- `/stats` - Show session statistics (messages, tool calls, duration)
+- `/reset` - Start new conversation
+- `/save` - Save conversation to file
+- `/exit` or `/quit` - Exit chat
+
 #### Query the System
 ```bash
-# Basic query
+# Single query (non-interactive)
 poetry run agrag query "What tests cover requirement REQ_AUTH_005?"
 
 # With streaming output
