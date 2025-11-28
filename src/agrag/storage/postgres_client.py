@@ -30,15 +30,23 @@ class PostgresClient:
         self.conn: Optional[psycopg.Connection] = None
         logger.info("PostgreSQL client initialized")
 
-    def connect(self) -> None:
-        """Establish connection to PostgreSQL database."""
+    def connect(self, register_types: bool = True) -> None:
+        """Establish connection to PostgreSQL database.
+        
+        Args:
+            register_types: Whether to register pgvector types (set False if extension not yet created)
+        """
         if self.conn is None or self.conn.closed:
             self.conn = psycopg.connect(
                 self.connection_string,
                 row_factory=dict_row,
             )
-            # Register pgvector types
-            register_vector(self.conn)
+            # Register pgvector types only if extension exists
+            if register_types:
+                try:
+                    register_vector(self.conn)
+                except Exception as e:
+                    logger.warning(f"Failed to register pgvector types: {e}")
             logger.info("Connected to PostgreSQL database")
 
     def close(self) -> None:
@@ -81,12 +89,20 @@ class PostgresClient:
         """
         logger.info("Setting up PostgreSQL schema...")
 
-        self.connect()
+        # Connect without registering vector types first
+        self.connect(register_types=False)
 
         with self.conn.cursor() as cur:
-            # Execute schema SQL
+            # Execute schema SQL (this will create the vector extension)
             cur.execute(POSTGRESQL_SCHEMA)
             self.conn.commit()
+
+        # Now register vector types
+        try:
+            register_vector(self.conn)
+            logger.info("Registered pgvector types")
+        except Exception as e:
+            logger.warning(f"Failed to register pgvector types: {e}")
 
         logger.info("PostgreSQL schema setup complete")
 
