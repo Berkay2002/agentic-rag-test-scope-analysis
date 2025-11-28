@@ -63,6 +63,8 @@ Required environment variables in `.env`:
 ```bash
 # Google AI (REQUIRED)
 GOOGLE_API_KEY=your_key_here
+GOOGLE_THINKING_LEVEL=low  # optional: low/high reasoning depth (Gemini 3)
+GOOGLE_THINKING_BUDGET=256  # optional: token budget for Gemini 2.5
 
 # Neo4j (REQUIRED - use Neo4j Aura or local instance)
 NEO4J_URI=neo4j+s://your_instance.databases.neo4j.io
@@ -153,6 +155,7 @@ The `agrag chat` command starts an interactive REPL session similar to Claude Co
 - `/stats` - Show session statistics
 - `/reset` - Start a new conversation
 - `/save` - Save conversation to file
+- `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
 - `/exit` or `/quit` - Exit chat
 
 **Example Chat Session:**

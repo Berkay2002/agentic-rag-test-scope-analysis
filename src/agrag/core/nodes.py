@@ -1,7 +1,7 @@
 """Graph nodes for StateGraph agent."""
 
 import logging
-from typing import List
+from typing import List, Any
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
 from langchain_core.tools import BaseTool
@@ -11,6 +11,31 @@ from agrag.models import get_llm
 from agrag.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _render_content(content: Any) -> str:
+    """Convert LLM content (str, list, dict) into displayable text."""
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, (list, tuple)):
+        rendered_parts = [_render_content(part) for part in content]
+        return "\n".join([part for part in rendered_parts if part])
+
+    if isinstance(content, dict):
+        # Common Gemini formats
+        if "text" in content and isinstance(content["text"], str):
+            return content["text"]
+        if "content" in content:
+            return _render_content(content["content"])
+        if "parts" in content:
+            return _render_content(content["parts"])
+
+    # Fallback to string conversion
+    return str(content)
 
 
 def call_model(state: AgentState, tools: List[BaseTool]) -> dict:
@@ -159,7 +184,7 @@ def finalize_answer(state: AgentState) -> dict:
     last_message = state["messages"][-1]
 
     if isinstance(last_message, AIMessage):
-        final_answer = last_message.content
+        final_answer = _render_content(last_message.content)
     else:
         final_answer = str(last_message.content)
 

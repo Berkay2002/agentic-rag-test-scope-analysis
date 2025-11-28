@@ -2,6 +2,7 @@
 
 import os
 from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,8 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = None
     google_model: str = "gemini-2.0-flash-exp"
     google_embedding_model: str = "models/text-embedding-004"
+    google_thinking_level: Optional[str] = None
+    google_thinking_budget: Optional[int] = None
     embedding_dimensions: int = 768
     llm_timeout_seconds: int = 45
 
@@ -112,6 +115,30 @@ class Settings(BaseSettings):
             raise ValueError(
                 "LANGCHAIN_API_KEY must be set when LangSmith tracing is enabled"
             )
+
+    @field_validator("google_thinking_level")
+    @classmethod
+    def validate_thinking_level(cls, value: Optional[str]) -> Optional[str]:
+        """Ensure thinking level is one of the supported Gemini values."""
+        if value is None:
+            return value
+
+        normalized = value.lower()
+        if normalized not in {"low", "high"}:
+            raise ValueError("GOOGLE_THINKING_LEVEL must be either 'low' or 'high'")
+        return normalized
+
+    @field_validator("google_thinking_budget")
+    @classmethod
+    def validate_thinking_budget(cls, value: Optional[int]) -> Optional[int]:
+        """Ensure thinking budget is within supported bounds."""
+        if value is None:
+            return value
+
+        if value < -1:
+            raise ValueError("GOOGLE_THINKING_BUDGET must be -1 (dynamic) or non-negative")
+
+        return value
 
 
 # Global settings instance

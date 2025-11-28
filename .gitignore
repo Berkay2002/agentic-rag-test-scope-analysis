@@ -84,3 +84,4 @@ evaluation_results/
 notebooks/.ipynb_checkpoints/
 *.sqlite
 *.db
+.pyc

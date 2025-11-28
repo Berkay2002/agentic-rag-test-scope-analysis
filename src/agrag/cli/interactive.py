@@ -2,7 +2,8 @@
 
 import sys
 import uuid
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+import json
 from datetime import datetime
 
 from prompt_toolkit import PromptSession
@@ -21,6 +22,14 @@ from langchain_core.messages import AIMessage
 
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
+from agrag.config import settings
+
+THINKING_PRESETS = {
+    "low": 256,
+    "medium": 1024,
+    "high": 4096,
+    "dynamic": -1,
+}
 
 
 class InteractiveChat:
@@ -78,6 +87,7 @@ class InteractiveChat:
             "/quit",
             "/reset",
             "/save",
+            "/thinking",
         ]
         self.completer = WordCompleter(commands, ignore_case=True)
 
@@ -100,6 +110,7 @@ class InteractiveChat:
         self.tool_calls_total = 0
         self.model_calls_total = 0
         self.start_time = datetime.now()
+        self.thinking_budget = settings.google_thinking_budget
 
     def _get_config(self) -> Dict[str, Any]:
         """Get the config for graph execution."""
@@ -169,6 +180,7 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
 - `/stats` - Show statistics
 - `/reset` - Start new conversation
 - `/save` - Save conversation to file
+- `/thinking [preset]` - View or set thinking budget
 - `/exit`, `/quit` - Exit chat
 
 **Example Queries:**
@@ -191,8 +203,70 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
 - Duration: {duration.seconds // 60}m {duration.seconds % 60}s
 - Persistence: {self._persistence_label()}
 - Mode: {'🚦 Safe Mode (you approve each tool)' if self.enable_hitl else '⚡ YOLO Mode (autonomous)'}
+- Thinking Budget: {self._format_thinking_budget(self.thinking_budget)}
 """
         self.console.print(Panel(Markdown(stats), title="Statistics", border_style="cyan"))
+
+    def _format_thinking_budget(self, value: Optional[int]) -> str:
+        """Return a friendly label for the current thinking budget."""
+        if value is None:
+            return "Default (model decides)"
+        preset = next((name for name, budget in THINKING_PRESETS.items() if budget == value), None)
+        if preset:
+            label = preset.capitalize()
+        else:
+            label = str(value)
+        if value == -1:
+            label += " (dynamic)"
+        elif value == 0:
+            label += " (disabled)"
+        return label
+
+    def _print_thinking_help(self):
+        """Display thinking configuration help."""
+        preset_details = "\n".join(
+            f"- `{name}` = {budget if budget != -1 else '-1 (dynamic)' } tokens"
+            for name, budget in THINKING_PRESETS.items()
+        )
+        help_text = f"""
+**Thinking Settings**
+- `/thinking` - Show current setting
+- `/thinking <preset>` - Apply preset (low, medium, high, dynamic) or an integer token budget
+
+{preset_details}
+
+Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e.g., `/thinking 512`).
+"""
+        self.console.print(Panel(Markdown(help_text), title="Thinking Configuration", border_style="magenta"))
+
+    def _handle_thinking_command(self, raw_command: str):
+        """Handle the /thinking command."""
+        parts = raw_command.split()
+
+        if len(parts) == 1:
+            self.console.print(
+                f"[cyan]Current thinking budget:[/cyan] {self._format_thinking_budget(self.thinking_budget)}"
+            )
+            self._print_thinking_help()
+            return
+
+        target = parts[1].lower()
+        if target in THINKING_PRESETS:
+            value = THINKING_PRESETS[target]
+        else:
+            try:
+                value = int(target)
+            except ValueError:
+                self.console.print(
+                    "[red]Invalid thinking value. Use a preset (low/medium/high/dynamic) or integer tokens.[/red]"
+                )
+                return
+
+        settings.google_thinking_budget = value
+        self.thinking_budget = value
+        self.console.print(
+            f"[green]✓ Thinking budget set to {self._format_thinking_budget(value)}[/green]"
+        )
 
     def _handle_command(self, user_input: str) -> bool:
         """Handle special commands.
@@ -203,7 +277,8 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
         Returns:
             True if should continue, False if should exit.
         """
-        command = user_input.lower().strip()
+        raw_command = user_input.strip()
+        command = raw_command.lower()
 
         if command in ["/exit", "/quit"]:
             self.console.print("\n[green]Goodbye! 👋[/green]\n")
@@ -246,6 +321,9 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
                 self.console.print(f"[green]✓ Conversation saved to {filename}[/green]")
             except Exception as e:
                 self.console.print(f"[red]✗ Failed to save: {e}[/red]")
+
+        elif command.startswith("/thinking"):
+            self._handle_thinking_command(raw_command)
 
         else:
             self.console.print(f"[red]Unknown command: {command}[/red]")
@@ -330,6 +408,25 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
             import traceback
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
+    def _extract_tool_calls(self, event: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Collect proposed tool calls from an interrupt event."""
+        tool_calls: List[Dict[str, Any]] = []
+        for node_name, node_state in event.items():
+            if node_name == "__interrupt__":
+                continue
+            messages = node_state.get("messages") if isinstance(node_state, dict) else None
+            if not messages:
+                continue
+            for message in messages:
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    for call in message.tool_calls:
+                        tool_calls.append({
+                            "node": node_name,
+                            "name": call.get("name"),
+                            "args": call.get("args", {}),
+                        })
+        return tool_calls
+
     def _handle_interrupt(self, event: Dict[str, Any], config: Dict[str, Any]):
         """Handle HITL interrupt.
 
@@ -338,13 +435,21 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
             config: The graph config.
         """
         self.console.print("\n[bold yellow]🚦 Approval Required[/bold yellow]\n")
-        self.console.print("[dim]The agent wants to execute the following tools:[/dim]\n")
+        tool_calls = self._extract_tool_calls(event)
 
-        # Extract proposed tool calls
-        # TODO: Implement proper tool call extraction and display
-        self.console.print("Proposed actions:")
-        self.console.print(event)
-        self.console.print()
+        if tool_calls:
+            self.console.print("[dim]The agent wants to execute the following tools:[/dim]\n")
+            for idx, call in enumerate(tool_calls, start=1):
+                args_json = json.dumps(call["args"], indent=2)
+                self.console.print(
+                    f"[cyan]{idx}. Node:[/cyan] {call['node']}\n"
+                    f"   [cyan]Tool:[/cyan] {call['name']}\n"
+                    f"   [cyan]Args:[/cyan]\n{args_json}\n"
+                )
+        else:
+            self.console.print(
+                "[dim]No structured tool call details available; approve to continue or reject to stop.[/dim]\n"
+            )
 
         # Ask for approval
         while True:
