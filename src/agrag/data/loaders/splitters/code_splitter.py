@@ -1,7 +1,6 @@
 """AST-based code splitter for structure-aware chunking."""
 
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 import logging
 
 try:
@@ -138,13 +137,7 @@ class CodeSplitter(BaseTextSplitter):
         """Extract standalone function definitions."""
         functions = []
 
-        # Query for function definitions at module level
-        query_string = """
-        (function_definition
-            name: (identifier) @func_name) @func_def
-        """
-
-        # Find all function nodes
+        # Find all function nodes at module level
         func_nodes = self._find_nodes_by_type(root_node, "function_definition")
 
         for func_node in func_nodes:

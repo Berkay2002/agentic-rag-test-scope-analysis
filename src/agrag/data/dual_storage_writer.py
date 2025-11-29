@@ -1,6 +1,6 @@
 """Coordinated dual storage writer with retry logic."""
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 from tenacity import retry, stop_after_attempt, wait_exponential
 

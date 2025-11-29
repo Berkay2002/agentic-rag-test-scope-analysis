@@ -1,7 +1,6 @@
 """Data ingestion pipeline for loading data into Neo4j and PostgreSQL."""
 
-from typing import List, Dict, Any
-from pathlib import Path
+from typing import List, Dict, Any, Optional
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import logging
 

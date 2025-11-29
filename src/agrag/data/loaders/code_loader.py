@@ -1,6 +1,6 @@
 """Code repository loader for ingesting source code."""
 
-from typing import List, Optional, Set
+from typing import List, Optional
 from pathlib import Path
 import logging
 
