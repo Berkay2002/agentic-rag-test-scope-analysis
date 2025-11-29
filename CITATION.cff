@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+type: software
+title: "Agentic GraphRAG for Test Scope Analysis"
+abstract: "A research implementation of an agentic RAG system combining Knowledge Graphs, Vector Search, and Human-in-the-Loop workflows for test scope analysis in telecommunications software systems."
+authors:
+  - family-names: "Orhan"
+    given-names: "Berkay"
+    email: Berkayorhan@hotmail.se
+    affiliation: "Linköping University"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+repository-code: "https://github.com/yourusername/agentic-rag-test-scope-analysis"
+url: "https://github.com/yourusername/agentic-rag-test-scope-analysis"
+keywords:
+  - retrieval-augmented-generation
+  - knowledge-graph
+  - agentic-ai
+  - langgraph
+  - neo4j
+  - test-analysis
+  - telecommunications
+  - master-thesis
+license: "SEE LICENSE IN LICENSE FILE"
+version: 0.1.0
+date-released: "2025-01-15"
+preferred-citation:
+  type: thesis
+  thesis-type: "Master's Thesis"
+  title: "Agentic GraphRAG for Test Scope Analysis in Telecommunications Software"
+  authors:
+    - family-names: "Orhan"
+      given-names: "Berkay"
+      email: Berkayorhan@hotmail.se
+      affiliation: "Linköping University"
+  institution:
+    name: "Linköping University"
+  year: 2025
+  department: "Department of Computer Science"
+  notes: "In collaboration with Ericsson"
