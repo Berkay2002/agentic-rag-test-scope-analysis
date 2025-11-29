@@ -1,24 +1,37 @@
 """Data ingestion pipeline for loading data into Neo4j and PostgreSQL."""
 
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import logging
 
+from langchain_core.documents import Document as LCDocument
+
 from agrag.storage.neo4j_client import Neo4jClient
 from agrag.storage.postgres_client import PostgresClient
+from agrag.storage.bm25_retriever import BM25RetrieverManager
 from agrag.data.dual_storage_writer import DualStorageWriter
 from agrag.models.embeddings import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
+# Default path for persisted BM25 index
+BM25_INDEX_PATH = "data/bm25_index.pkl"
+
 
 class DataIngestion:
     """Load data into Neo4j and PostgreSQL."""
 
-    def __init__(self):
-        """Initialize ingestion pipeline with database clients."""
+    def __init__(self, bm25_index_path: str = BM25_INDEX_PATH):
+        """Initialize ingestion pipeline with database clients.
+
+        Args:
+            bm25_index_path: Path to persist BM25 index for keyword search
+        """
         self.neo4j_client = Neo4jClient()
         self.postgres_client = PostgresClient()
+        self.bm25_manager = BM25RetrieverManager(k=10)
+        self.bm25_index_path = bm25_index_path
         logger.info("Data ingestion pipeline initialized")
 
     def ingest_entities_neo4j(
@@ -40,12 +53,10 @@ class DataIngestion:
 
         logger.info(f"Ingesting {len(entities)} {entity_type} entities into Neo4j...")
 
-        # Remove embeddings for Neo4j (stored in PostgreSQL)
+        # Prepare entities for Neo4j - keep embeddings for vector search
         neo4j_entities = []
         for entity in entities:
             entity_copy = entity.copy()
-            if "embedding" in entity_copy:
-                del entity_copy["embedding"]
             # Convert metadata dict to JSON string for Neo4j
             if "metadata" in entity_copy and isinstance(entity_copy["metadata"], dict):
                 import json
@@ -251,6 +262,7 @@ class DataIngestion:
             # Ingest entities
             neo4j_counts = {}
             postgres_counts = {}
+            bm25_count = 0
 
             total_entities = len(entities)
             entity_task = progress.add_task("[cyan]Ingesting entities...", total=total_entities)
@@ -264,6 +276,12 @@ class DataIngestion:
                 postgres_count = self.ingest_entities_postgres(type_entities, entity_type)
                 postgres_counts[entity_type] = postgres_count
 
+                # BM25 index - add documents for keyword search
+                bm25_docs = self._entities_to_bm25_documents(type_entities, entity_type)
+                if bm25_docs:
+                    self.bm25_manager.add_documents(bm25_docs)
+                    bm25_count += len(bm25_docs)
+
                 progress.update(entity_task, advance=len(type_entities))
 
             # Ingest relationships
@@ -273,9 +291,15 @@ class DataIngestion:
             rel_count = self.ingest_relationships_neo4j(relationships)
             progress.update(rel_task, advance=len(relationships))
 
+            # Persist BM25 index
+            bm25_task = progress.add_task("[cyan]Persisting BM25 index...", total=1)
+            self._persist_bm25_index()
+            progress.update(bm25_task, advance=1)
+
         results = {
             "neo4j_entities": sum(neo4j_counts.values()),
             "postgres_entities": sum(postgres_counts.values()),
+            "bm25_documents": bm25_count,
             "relationships": rel_count,
             "details": {
                 "neo4j": neo4j_counts,
@@ -288,8 +312,85 @@ class DataIngestion:
             f"Neo4j: {results['neo4j_entities']} entities, {results['relationships']} relationships"
         )
         logger.info(f"PostgreSQL: {results['postgres_entities']} entities with embeddings")
+        logger.info(f"BM25: {results['bm25_documents']} documents indexed")
 
         return results
+
+    def _entities_to_bm25_documents(
+        self, entities: List[Dict[str, Any]], entity_type: str
+    ) -> List[LCDocument]:
+        """
+        Convert entities to LangChain Documents for BM25 indexing.
+
+        Args:
+            entities: List of entity dictionaries
+            entity_type: Type of entity (Requirement, TestCase, etc.)
+
+        Returns:
+            List of LangChain Document objects
+        """
+        documents = []
+
+        for entity in entities:
+            # Build searchable content from multiple fields
+            content_parts = [
+                entity.get("id", ""),
+                entity.get("name", ""),
+                entity.get("description", ""),
+                entity.get("docstring", ""),
+                entity.get("signature", ""),
+                entity.get("category", ""),
+                entity.get("test_type", ""),
+                entity.get("feature_area", ""),
+                entity.get("sub_feature", ""),
+            ]
+
+            # Add tags if present
+            tags = entity.get("tags", [])
+            if tags:
+                content_parts.extend(tags)
+
+            content = " ".join(str(p) for p in content_parts if p)
+
+            if not content.strip():
+                continue
+
+            # Create metadata
+            metadata = {
+                "entity_type": entity_type,
+                "entity_id": entity["id"],
+                "chunk_id": f"{entity_type}_{entity['id']}",
+            }
+
+            # Add additional metadata fields for filtering
+            for key in [
+                "category",
+                "test_type",
+                "priority",
+                "status",
+                "file_path",
+                "result",
+                "feature_area",
+            ]:
+                if key in entity and entity[key]:
+                    metadata[key] = str(entity[key])
+
+            doc = LCDocument(page_content=content, metadata=metadata)
+            documents.append(doc)
+
+        return documents
+
+    def _persist_bm25_index(self) -> None:
+        """Persist BM25 index to disk."""
+        try:
+            # Ensure directory exists
+            index_path = Path(self.bm25_index_path)
+            index_path.parent.mkdir(parents=True, exist_ok=True)
+
+            self.bm25_manager.save(self.bm25_index_path)
+            logger.info(f"BM25 index persisted to {self.bm25_index_path}")
+        except Exception as e:
+            logger.warning(f"Failed to persist BM25 index: {e}")
 
     def ingest_from_code_repository(self, repo_path: str) -> Dict[str, int]:
         """
