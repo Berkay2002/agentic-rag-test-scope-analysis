@@ -1,50 +1,58 @@
-"""Keyword search tool for lexical retrieval using BM25 algorithm."""
+"""Keyword search tool for lexical retrieval using PostgreSQL pg_search BM25.
+
+Uses ParadeDB's pg_search extension with true BM25 ranking algorithm for
+cloud-persistent keyword search stored alongside vector embeddings.
+"""
 
 import time
-from typing import Type, Optional
+from typing import Optional
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
 import logging
 
 from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
-from agrag.storage import BM25RetrieverManager
+from agrag.storage import PostgresClient
 
 logger = logging.getLogger(__name__)
 
 
 class KeywordSearchTool(BaseTool):
-    """Tool for keyword-based lexical search using BM25 algorithm."""
+    """Tool for keyword-based lexical search using pg_search BM25.
+
+    Uses ParadeDB's pg_search extension with true BM25 probabilistic ranking,
+    providing cloud-persistent keyword search stored in the same database as
+    vector embeddings.
+    """
 
     name: str = "keyword_search"
     description: str = """Use this tool for exact matches and lexical queries using BM25 ranking.
     Best for:
     - Specific identifiers (test IDs, function names, error codes)
-    - Exact keyword matching with probabilistic ranking
+    - Exact keyword matching with BM25 probabilistic ranking
     - When you know the specific terms that should appear
     Examples: "TestLoginTimeout", "error code E503", "initiate_handover"
     """
-    args_schema: Type[BaseModel] = KeywordSearchInput
+    args_schema: type[KeywordSearchInput] = KeywordSearchInput  # type: ignore[assignment]
 
-    bm25_manager: Optional[BM25RetrieverManager] = None
+    postgres_client: Optional[PostgresClient] = None
 
-    def __init__(self, bm25_manager: BM25RetrieverManager = None, **kwargs):
+    def __init__(self, postgres_client: Optional[PostgresClient] = None, **kwargs):
         """
-        Initialize keyword search tool with BM25.
+        Initialize keyword search tool with PostgreSQL full-text search.
 
         Args:
-            bm25_manager: BM25 retriever manager instance (creates new if not provided)
+            postgres_client: PostgreSQL client instance (creates new if not provided)
         """
         super().__init__(**kwargs)
-        self.bm25_manager = bm25_manager or BM25RetrieverManager(k=10)
+        self.postgres_client = postgres_client or PostgresClient()
 
     def _run(
         self,
         query: str,
         k: int = 10,
-        entity_type: str = None,
+        entity_type: Optional[str] = None,
     ) -> str:
         """
-        Execute BM25 keyword search.
+        Execute PostgreSQL full-text keyword search.
 
         Args:
             query: Keyword query string
@@ -56,15 +64,18 @@ class KeywordSearchTool(BaseTool):
         """
         start_time = time.time()
 
+        if self.postgres_client is None:
+            return "Error: PostgreSQL client not initialized"
+
         try:
             # Build metadata filter if entity type provided
             metadata_filter = {}
             if entity_type:
                 metadata_filter["entity_type"] = entity_type
 
-            # Perform BM25 search
-            logger.info(f"Performing BM25 keyword search: {query}")
-            results = self.bm25_manager.search(
+            # Perform pg_search BM25 keyword search
+            logger.info(f"Performing pg_search BM25 keyword search: {query}")
+            results = self.postgres_client.keyword_search(
                 query=query,
                 k=k,
                 metadata_filter=metadata_filter if metadata_filter else None,
@@ -76,9 +87,9 @@ class KeywordSearchTool(BaseTool):
                 search_result = SearchResult(
                     id=result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
-                    score=float(result.get("score", 0.0)),
+                    score=float(result.get("rank", 0.0)),
                     metadata=result.get("metadata", {}),
-                    source="bm25",
+                    source="postgres_fts",
                 )
                 search_results.append(search_result)
 
@@ -95,8 +106,8 @@ class KeywordSearchTool(BaseTool):
             return self._format_output(output)
 
         except Exception as e:
-            logger.error(f"BM25 keyword search failed: {e}")
-            return f"Error performing BM25 keyword search: {str(e)}"
+            logger.error(f"pg_search BM25 keyword search failed: {e}")
+            return f"Error performing keyword search: {str(e)}"
 
     def _format_output(self, output: KeywordSearchOutput) -> str:
         """
@@ -112,21 +123,19 @@ class KeywordSearchTool(BaseTool):
             return f"No results found for query: '{output.query}'"
 
         lines = [
-            f"BM25 Keyword Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
+            f"Keyword Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
             f"Query: {output.query}",
             "",
         ]
 
         for i, result in enumerate(output.results, 1):
-            lines.append(f"{i}. ID: {result.id} (BM25 Score: {result.score:.4f})")
+            lines.append(f"{i}. ID: {result.id} (FTS Rank: {result.score:.4f})")
             lines.append(f"   Content: {result.content[:200]}...")
             if result.metadata:
                 entity_type = result.metadata.get("entity_type", "Unknown")
                 lines.append(f"   Entity Type: {entity_type}")
             lines.append("")
 
-        lines.append(
-            "Note: BM25 (Best Matching 25) is a probabilistic ranking function for keyword search."
-        )
+        lines.append("Note: Uses pg_search extension with true BM25 ranking (ParadeDB).")
 
         return "\n".join(lines)

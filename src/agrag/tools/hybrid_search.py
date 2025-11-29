@@ -1,52 +1,55 @@
-"""Hybrid search tool combining vector and BM25 keyword search with RRF fusion."""
+"""Hybrid search tool combining vector and keyword search with RRF fusion.
+
+Uses PostgreSQL's pgvector for semantic similarity and pg_search BM25 for keyword
+ranking, providing cloud-persistent hybrid retrieval with Reciprocal Rank Fusion.
+"""
 
 import time
-from typing import Type, Optional, Any, Dict, List
+from typing import Optional, Any
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
 import logging
 
 from agrag.tools.schemas import HybridSearchInput, HybridSearchOutput, SearchResult
-from agrag.storage import PostgresClient, BM25RetrieverManager
+from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
 
 class HybridSearchTool(BaseTool):
-    """Tool for hybrid search combining semantic vector search and BM25 lexical retrieval."""
+    """Tool for hybrid search combining semantic vector search and lexical retrieval.
+
+    Uses PostgreSQL's pgvector for vector similarity and pg_search BM25 for keyword
+    ranking, fused using Reciprocal Rank Fusion (RRF).
+    """
 
     name: str = "hybrid_search"
     description: str = """Use this tool when you need both semantic understanding AND exact keyword matching.
-    Combines vector similarity search (HNSW) with BM25 probabilistic ranking using RRF fusion.
+    Combines vector similarity search (pgvector) with BM25 keyword search (pg_search) using RRF fusion.
     Best for:
     - Complex queries requiring both conceptual understanding and specific terms
     - Balancing semantic similarity with lexical precision
     - Queries that mix concepts with technical identifiers
     Examples: "tests for LTE signaling with timeout errors", "handover functions in network module"
     """
-    args_schema: Type[BaseModel] = HybridSearchInput
+    args_schema: type[HybridSearchInput] = HybridSearchInput  # type: ignore[assignment]
 
     postgres_client: Optional[PostgresClient] = None
-    bm25_manager: Optional[BM25RetrieverManager] = None
     embedding_service: Optional[Any] = None
 
     def __init__(
         self,
-        postgres_client: PostgresClient = None,
-        bm25_manager: BM25RetrieverManager = None,
+        postgres_client: Optional[PostgresClient] = None,
         **kwargs,
     ):
         """
-        Initialize hybrid search tool.
+        Initialize hybrid search tool with PostgreSQL.
 
         Args:
-            postgres_client: PostgreSQL client instance for vector search
-            bm25_manager: BM25 retriever manager for keyword search
+            postgres_client: PostgreSQL client instance for both vector and keyword search
         """
         super().__init__(**kwargs)
         self.postgres_client = postgres_client or PostgresClient()
-        self.bm25_manager = bm25_manager or BM25RetrieverManager(k=10)
         self.embedding_service = get_embedding_service()
 
     def _run(
@@ -54,10 +57,10 @@ class HybridSearchTool(BaseTool):
         query: str,
         k: int = 10,
         rrf_k: int = 60,
-        entity_type: str = None,
+        entity_type: Optional[str] = None,
     ) -> str:
         """
-        Execute hybrid search with RRF fusion of vector and BM25 results.
+        Execute hybrid search with RRF fusion of vector and keyword results.
 
         Args:
             query: Search query string
@@ -70,6 +73,11 @@ class HybridSearchTool(BaseTool):
         """
         start_time = time.time()
 
+        if self.embedding_service is None:
+            return "Error: Embedding service not initialized"
+        if self.postgres_client is None:
+            return "Error: PostgreSQL client not initialized"
+
         try:
             # Generate query embedding for vector component
             logger.info(f"Generating embedding for hybrid search query: {query}")
@@ -80,34 +88,19 @@ class HybridSearchTool(BaseTool):
             if entity_type:
                 metadata_filter["entity_type"] = entity_type
 
-            # Perform vector search
-            logger.info("Performing vector search component...")
-            vector_results = self.postgres_client.vector_search(
-                query_embedding=query_embedding,
-                k=k * 2,  # Get more candidates for fusion
-                metadata_filter=metadata_filter if metadata_filter else None,
-            )
-
-            # Perform BM25 search
-            logger.info("Performing BM25 keyword search component...")
-            bm25_results = self.bm25_manager.search(
+            # Perform PostgreSQL hybrid search (pgvector + pg_search BM25 with RRF fusion)
+            logger.info(f"Performing hybrid search (pgvector + pg_search BM25, RRF k={rrf_k})...")
+            results = self.postgres_client.hybrid_search(
                 query=query,
-                k=k * 2,  # Get more candidates for fusion
-                metadata_filter=metadata_filter if metadata_filter else None,
-            )
-
-            # Apply RRF fusion
-            logger.info(f"Applying RRF fusion (k={rrf_k})...")
-            fused_results = self._apply_rrf_fusion(
-                vector_results=vector_results,
-                bm25_results=bm25_results,
+                query_embedding=query_embedding,
                 k=k,
                 rrf_k=rrf_k,
+                metadata_filter=metadata_filter if metadata_filter else None,
             )
 
             # Format results
             search_results = []
-            for result in fused_results:
+            for result in results:
                 search_result = SearchResult(
                     id=result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
@@ -124,7 +117,7 @@ class HybridSearchTool(BaseTool):
                 query=query,
                 total_results=len(search_results),
                 retrieval_time_ms=retrieval_time_ms,
-                fusion_method="RRF (Vector+BM25)",
+                fusion_method="RRF (pgvector + pg_search BM25)",
             )
 
             # Format for agent consumption
@@ -133,59 +126,6 @@ class HybridSearchTool(BaseTool):
         except Exception as e:
             logger.error(f"Hybrid search failed: {e}")
             return f"Error performing hybrid search: {str(e)}"
-
-    def _apply_rrf_fusion(
-        self,
-        vector_results: List[Dict],
-        bm25_results: List[Dict],
-        k: int,
-        rrf_k: int,
-    ) -> List[Dict]:
-        """
-        Apply Reciprocal Rank Fusion to combine vector and BM25 results.
-
-        Args:
-            vector_results: Results from vector search
-            bm25_results: Results from BM25 search
-            k: Number of final results
-            rrf_k: RRF constant
-
-        Returns:
-            Fused and ranked results
-        """
-        rrf_scores: Dict[str, float] = {}
-        rrf_docs: Dict[str, Dict] = {}
-
-        # Process vector results
-        for rank, result in enumerate(vector_results, start=1):
-            chunk_id = result.get("chunk_id", "unknown")
-            rrf_scores[chunk_id] = 1 / (rrf_k + rank)
-            rrf_docs[chunk_id] = result
-
-        # Process BM25 results
-        for rank, result in enumerate(bm25_results, start=1):
-            chunk_id = result.get("chunk_id", "unknown")
-            if chunk_id in rrf_scores:
-                rrf_scores[chunk_id] += 1 / (rrf_k + rank)
-            else:
-                rrf_scores[chunk_id] = 1 / (rrf_k + rank)
-                rrf_docs[chunk_id] = result
-
-        # Sort by RRF score and take top k
-        sorted_results = sorted(
-            rrf_scores.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )[:k]
-
-        # Build final results
-        final_results = []
-        for chunk_id, score in sorted_results:
-            doc = rrf_docs[chunk_id].copy()
-            doc["rrf_score"] = score
-            final_results.append(doc)
-
-        return final_results
 
     def _format_output(self, output: HybridSearchOutput) -> str:
         """
@@ -215,7 +155,7 @@ class HybridSearchTool(BaseTool):
             lines.append("")
 
         lines.append(
-            "Note: RRF combines HNSW vector similarity and BM25 keyword ranking for optimal precision."
+            "Note: RRF combines pgvector similarity and pg_search BM25 ranking for optimal precision."
         )
 
         return "\n".join(lines)

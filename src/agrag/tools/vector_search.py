@@ -1,20 +1,19 @@
-"""Vector search tool for semantic retrieval using Neo4j vector indexes."""
+"""Vector search tool for semantic retrieval using PostgreSQL pgvector."""
 
 import time
-from typing import Type, Optional, Any
+from typing import Optional, Any
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
 import logging
 
 from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
-from agrag.storage import Neo4jClient
+from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
 
 class VectorSearchTool(BaseTool):
-    """Tool for semantic vector search using Neo4j vector indexes."""
+    """Tool for semantic vector search using PostgreSQL pgvector."""
 
     name: str = "vector_search"
     description: str = """Use this tool for semantic queries requiring conceptual understanding.
@@ -24,78 +23,75 @@ class VectorSearchTool(BaseTool):
     - When you need to understand the "meaning" behind the query
     Examples: "tests related to handover failures", "authentication requirements"
     """
-    args_schema: Type[BaseModel] = VectorSearchInput
+    args_schema: type[VectorSearchInput] = VectorSearchInput  # type: ignore[assignment]
 
-    neo4j_client: Optional[Neo4jClient] = None
+    postgres_client: Optional[PostgresClient] = None
     embedding_service: Optional[Any] = None
 
-    def __init__(self, neo4j_client: Neo4jClient = None, **kwargs):
+    def __init__(self, postgres_client: Optional[PostgresClient] = None, **kwargs):
         """
         Initialize vector search tool.
 
         Args:
-            neo4j_client: Neo4j client instance (creates new if not provided)
+            postgres_client: PostgreSQL client instance (creates new if not provided)
         """
         super().__init__(**kwargs)
-        self.neo4j_client = neo4j_client or Neo4jClient()
+        self.postgres_client = postgres_client or PostgresClient()
         self.embedding_service = get_embedding_service()
 
     def _run(
         self,
         query: str,
         k: int = 10,
-        node_type: str = "TestCase",
-        similarity_threshold: float = None,
+        node_type: Optional[str] = None,
+        similarity_threshold: Optional[float] = None,
     ) -> str:
         """
-        Execute vector search.
+        Execute vector search using pgvector.
 
         Args:
             query: Natural language query
             k: Number of results
-            node_type: Type of nodes to search
-            similarity_threshold: Minimum similarity threshold
+            node_type: Optional entity type filter (e.g., "TestCase", "Requirement")
+            similarity_threshold: Minimum similarity threshold (not used with pgvector distance)
 
         Returns:
             Formatted search results as string
         """
         start_time = time.time()
 
+        if self.embedding_service is None:
+            return "Error: Embedding service not initialized"
+        if self.postgres_client is None:
+            return "Error: PostgreSQL client not initialized"
+
         try:
             # Generate query embedding
             logger.info(f"Generating embedding for query: {query}")
             query_embedding = self.embedding_service.embed_query(query)
 
-            # Map string to NodeLabel enum
-            from agrag.kg.ontology import NodeLabel
+            # Build metadata filter if node_type provided
+            metadata_filter = None
+            if node_type:
+                metadata_filter = {"entity_type": node_type}
 
-            try:
-                node_label = NodeLabel[node_type.upper().replace("TESTCASE", "TEST_CASE")]
-            except KeyError:
-                node_label = NodeLabel.TEST_CASE
-
-            # Perform vector search in Neo4j
-            logger.info(f"Performing vector search for {node_label.value}")
-            results = self.neo4j_client.vector_search(
+            # Perform vector search in PostgreSQL using pgvector
+            logger.info(f"Performing pgvector search (entity_type={node_type})")
+            results = self.postgres_client.vector_search(
                 query_embedding=query_embedding,
-                node_label=node_label,
                 k=k,
-                similarity_threshold=similarity_threshold,
+                metadata_filter=metadata_filter,
             )
 
             # Format results
             search_results = []
             for result in results:
-                node = result["node"]
                 search_result = SearchResult(
-                    id=node.get("id", "unknown"),
-                    content=node.get("description", node.get("name", "")),
-                    score=float(result["score"]),
-                    metadata={
-                        "label": result["label"],
-                        **{k: v for k, v in node.items() if k not in ["embedding", "id"]},
-                    },
-                    source="vector",
+                    id=result.get("chunk_id", "unknown"),
+                    content=result.get("content", ""),
+                    score=float(result.get("similarity", 0.0)),
+                    metadata=result.get("metadata", {}),
+                    source="pgvector",
                 )
                 search_results.append(search_result)
 
@@ -135,14 +131,11 @@ class VectorSearchTool(BaseTool):
         ]
 
         for i, result in enumerate(output.results, 1):
-            lines.append(f"{i}. ID: {result.id} (Score: {result.score:.4f})")
+            lines.append(f"{i}. ID: {result.id} (Similarity: {result.score:.4f})")
             lines.append(f"   Content: {result.content[:200]}...")
             if result.metadata:
-                meta_str = ", ".join(
-                    [f"{k}: {v}" for k, v in result.metadata.items() if k != "label"]
-                )
-                if meta_str:
-                    lines.append(f"   Metadata: {meta_str}")
+                entity_type = result.metadata.get("entity_type", "Unknown")
+                lines.append(f"   Entity Type: {entity_type}")
             lines.append("")
 
         return "\n".join(lines)
