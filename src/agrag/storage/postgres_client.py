@@ -2,8 +2,9 @@
 
 from typing import List, Dict, Any, Optional
 import psycopg
-from psycopg.rows import dict_row
-from pgvector import Vector
+from psycopg import Connection
+from psycopg.rows import dict_row, DictRow
+from psycopg.types.json import Json
 from pgvector.psycopg import register_vector
 import logging
 
@@ -28,7 +29,7 @@ class PostgresClient:
         if not self.connection_string:
             raise ValueError("PostgreSQL connection string must be provided")
 
-        self.conn: Optional[psycopg.Connection] = None
+        self.conn: Optional[Connection[DictRow]] = None
         logger.info("PostgreSQL client initialized")
 
     def connect(self, register_types: bool = True) -> None:
@@ -38,9 +39,10 @@ class PostgresClient:
             register_types: Whether to register pgvector types (set False if extension not yet created)
         """
         if self.conn is None or self.conn.closed:
+            # Note: psycopg.connect with row_factory requires cast due to type stub limitations
             self.conn = psycopg.connect(
                 self.connection_string,
-                row_factory=dict_row,
+                row_factory=dict_row,  # type: ignore[arg-type]
             )
             # Register pgvector types only if extension exists
             if register_types:
@@ -74,10 +76,12 @@ class PostgresClient:
         """
         try:
             self.connect()
+            if self.conn is None:
+                return False
             with self.conn.cursor() as cur:
                 cur.execute("SELECT 1 AS num")
                 result = cur.fetchone()
-                return result["num"] == 1
+                return result is not None and result["num"] == 1
         except Exception as e:
             logger.error(f"PostgreSQL connectivity check failed: {e}")
             return False
@@ -92,6 +96,9 @@ class PostgresClient:
 
         # Connect without registering vector types first
         self.connect(register_types=False)
+
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
 
         with self.conn.cursor() as cur:
             # Execute schema SQL (this will create the vector extension)
@@ -128,6 +135,9 @@ class PostgresClient:
         """
         self.connect()
 
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
+
         query = """
         INSERT INTO document_chunks (chunk_id, content, embedding, metadata)
         VALUES (%s, %s, %s, %s)
@@ -139,15 +149,15 @@ class PostgresClient:
         RETURNING chunk_id
         """
 
-        embedding_vector = Vector(embedding) if not isinstance(embedding, Vector) else embedding
-
         with self.conn.cursor() as cur:
             cur.execute(
                 query,
-                (chunk_id, content, embedding_vector, psycopg.types.json.Json(metadata or {})),
+                (chunk_id, content, embedding, Json(metadata or {})),
             )
             self.conn.commit()
             result = cur.fetchone()
+            if result is None:
+                raise RuntimeError("Insert failed: no result returned")
             return result["chunk_id"]
 
     def vector_search(
@@ -169,6 +179,9 @@ class PostgresClient:
         """
         self.connect()
 
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
+
         # Base query - cast to vector type explicitly
         query = """
         SELECT
@@ -180,10 +193,7 @@ class PostgresClient:
         FROM document_chunks
         """
 
-        embedding_vector = (
-            Vector(query_embedding) if not isinstance(query_embedding, Vector) else query_embedding
-        )
-        params = [embedding_vector, embedding_vector]
+        params: List[Any] = [query_embedding, query_embedding]
 
         # Add metadata filter if provided
         if metadata_filter:
@@ -202,7 +212,7 @@ class PostgresClient:
             with self.conn.cursor() as cur:
                 cur.execute(query, params)
                 results = cur.fetchall()
-            return results
+            return [dict(row) for row in results]
         except Exception as e:
             # Rollback transaction on error
             if self.conn and not self.conn.closed:
@@ -216,7 +226,10 @@ class PostgresClient:
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Perform full-text keyword search using PostgreSQL FTS.
+        Perform BM25 keyword search using pg_search extension.
+
+        Uses ParadeDB's pg_search with true BM25 ranking algorithm,
+        providing better relevance scoring than traditional TF-IDF.
 
         Args:
             query: Search query string
@@ -224,23 +237,26 @@ class PostgresClient:
             metadata_filter: Optional metadata filter
 
         Returns:
-            List of matching documents with scores
+            List of matching documents with BM25 scores
         """
         self.connect()
 
-        # Base query using ts_rank_cd for BM25-style ranking
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
+
+        # Use pg_search BM25 index with @@@ operator and paradedb.score()
+        # The @@@ operator performs BM25 full-text search
         query_sql = """
         SELECT
             chunk_id,
             content,
             metadata,
-            ts_rank_cd(to_tsvector('english', content), query) AS rank
-        FROM document_chunks,
-             plainto_tsquery('english', %s) AS query
-        WHERE to_tsvector('english', content) @@ query
+            paradedb.score(id) AS rank
+        FROM document_chunks
+        WHERE content @@@ %s
         """
 
-        params = [query]
+        params: List[Any] = [query]
 
         # Add metadata filter if provided
         if metadata_filter:
@@ -252,14 +268,14 @@ class PostgresClient:
             if conditions:
                 query_sql += " AND " + " AND ".join(conditions)
 
-        query_sql += " ORDER BY rank DESC LIMIT %s"
+        query_sql += " ORDER BY paradedb.score(id) DESC LIMIT %s"
         params.append(k)
 
         try:
             with self.conn.cursor() as cur:
                 cur.execute(query_sql, params)
                 results = cur.fetchall()
-            return results
+            return [dict(row) for row in results]
         except Exception as e:
             # Rollback transaction on error
             if self.conn and not self.conn.closed:
@@ -275,9 +291,11 @@ class PostgresClient:
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Perform hybrid search combining vector and keyword search with RRF.
+        Perform hybrid search combining pgvector and BM25 with RRF fusion.
 
-        Uses Reciprocal Rank Fusion (RRF) to merge results.
+        Uses Reciprocal Rank Fusion (RRF) to merge:
+        - Vector similarity results (pgvector HNSW index)
+        - BM25 keyword results (pg_search BM25 index)
 
         Args:
             query: Search query string
@@ -348,13 +366,16 @@ class PostgresClient:
         """
         self.connect()
 
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
+
         query = "SELECT * FROM document_chunks WHERE chunk_id = %s"
 
         with self.conn.cursor() as cur:
             cur.execute(query, (chunk_id,))
             result = cur.fetchone()
 
-        return result
+        return dict(result) if result else None
 
     def delete_all_chunks(self) -> int:
         """
@@ -364,6 +385,9 @@ class PostgresClient:
             Number of chunks deleted
         """
         self.connect()
+
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
 
         query = "DELETE FROM document_chunks RETURNING chunk_id"
 
@@ -385,10 +409,13 @@ class PostgresClient:
         """
         self.connect()
 
+        if self.conn is None:
+            raise RuntimeError("Failed to establish database connection")
+
         query = "SELECT COUNT(*) AS count FROM document_chunks"
 
         with self.conn.cursor() as cur:
             cur.execute(query)
             result = cur.fetchone()
 
-        return result["count"] if result else 0
+        return int(result["count"]) if result else 0
