@@ -304,7 +304,7 @@ result = tool.invoke({
 ```
 
 ### 2. Keyword Search
-Lexical search using PostgreSQL full-text search (ts_rank_cd).
+Lexical search using BM25 (Best Matching 25) probabilistic ranking algorithm.
 
 **Best for:**
 - Exact keyword matches
