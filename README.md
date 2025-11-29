@@ -1,6 +1,25 @@
 # Agentic GraphRAG for Test Scope Analysis
 
-A production-grade Retrieval-Augmented Generation (RAG) system combining Knowledge Graphs, Vector Search, and Agentic workflows for test scope analysis in telecommunications software systems.
+[![Research](https://img.shields.io/badge/Research-Master's%20Thesis-blue.svg)](https://github.com/yourusername/agentic-rag-test-scope-analysis)
+[![License](https://img.shields.io/badge/License-Academic%20Research-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+> **Master's Thesis Research Project**  
+> Conducted in collaboration with **Ericsson**  
+> Linköping University, 2024-2025
+
+A research implementation of an agentic Retrieval-Augmented Generation (RAG) system combining Knowledge Graphs, Vector Search, and Human-in-the-Loop workflows for test scope analysis in telecommunications software systems.
+
+## ⚠️ Academic Research Project
+
+This repository contains the implementation for a Master's Thesis. The code is made publicly available for:
+- Academic transparency and reproducible research
+- Peer review and thesis evaluation
+- Educational purposes and research community benefit
+
+**Important**: This is a research artifact, not a production-ready commercial product. See [LICENSE](LICENSE), [DISCLAIMER.md](DISCLAIMER.md), and [CONTRIBUTING.md](CONTRIBUTING.md) for usage terms and restrictions.
 
 ## Overview
 
@@ -25,31 +44,45 @@ This system implements a comprehensive agentic RAG architecture that addresses t
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     LangGraph StateGraph                    │
-│  ┌──────────┐    ┌─────────────┐    ┌──────────────┐       │
-│  │   Call   │───▶│   Execute   │───▶│   Finalize   │       │
-│  │  Model   │    │    Tools    │    │    Answer    │       │
-│  └──────────┘    └─────────────┘    └──────────────┘       │
-│       ▲               │                                      │
-│       └───────────────┘                                      │
-└─────────────────────────────────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-┌───────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐
-│   Vector     │ │  Keyword   │ │   Graph    │
-│   Search     │ │   Search   │ │  Traverse  │
-└──────────────┘ └────────────┘ └────────────┘
-        │               │               │
-┌───────▼───────────────▼───────────────▼──────┐
-│             Storage Layer                     │
-│  ┌──────────────┐      ┌──────────────┐      │
-│  │    Neo4j     │      │ PostgreSQL   │      │
-│  │ (Graph+Vec)  │      │ (pgvector)   │      │
-│  └──────────────┘      └──────────────┘      │
-└───────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph StateGraph["LangGraph StateGraph"]
+        CallModel["Call<br/>Model"]
+        ExecuteTools["Execute<br/>Tools"]
+        FinalizeAnswer["Finalize<br/>Answer"]
+        
+        CallModel --> ExecuteTools
+        ExecuteTools --> FinalizeAnswer
+        FinalizeAnswer -.-> CallModel
+    end
+    
+    subgraph Tools["Retrieval Tools"]
+        VectorSearch["Vector<br/>Search"]
+        KeywordSearch["Keyword<br/>Search"]
+        GraphTraverse["Graph<br/>Traverse"]
+        HybridSearch["Hybrid<br/>Search"]
+    end
+    
+    subgraph Storage["Storage Layer"]
+        Neo4j["Neo4j<br/>(Graph + Vector)"]
+        PostgreSQL["PostgreSQL<br/>(pgvector + FTS)"]
+    end
+    
+    ExecuteTools --> VectorSearch
+    ExecuteTools --> KeywordSearch
+    ExecuteTools --> GraphTraverse
+    ExecuteTools --> HybridSearch
+    
+    VectorSearch --> Neo4j
+    VectorSearch --> PostgreSQL
+    KeywordSearch --> PostgreSQL
+    GraphTraverse --> Neo4j
+    HybridSearch --> Neo4j
+    HybridSearch --> PostgreSQL
+    
+    style StateGraph fill:#e1f5ff
+    style Tools fill:#fff4e1
+    style Storage fill:#e8f5e9
 ```
 
 ## Installation
@@ -318,7 +351,7 @@ src/agrag/
 │   ├── state.py      # AgentState definition
 │   ├── nodes.py      # Graph nodes
 │   └── graph.py      # StateGraph builder
-├── data/             # Data ingestion (TODO)
+├── data/             # Data generation and ingestion
 ├── evaluation/       # Evaluation metrics
 ├── kg/               # Knowledge graph ontology
 ├── models/           # LLM and embedding wrappers
@@ -383,19 +416,40 @@ MIT License - see LICENSE file for details.
 
 ## Citation
 
-If you use this work in research, please cite:
+If you use this work in your research, please cite:
 
 ```bibtex
-@software{agrag2025,
-  title={Agentic GraphRAG for Test Scope Analysis},
-  author={Your Name},
-  year={2025},
-  url={https://github.com/yourusername/agentic-rag-test-scope-analysis}
+@mastersthesis{agrag2025,
+  author = {Berkay Orhan},
+  title = {Agentic GraphRAG for Test Scope Analysis in Telecommunications Software},
+  school = {Linköping University},
+  year = {2025},
+  note = {Master's Thesis, in collaboration with Ericsson},
+  url = {https://github.com/yourusername/agentic-rag-test-scope-analysis}
 }
 ```
 
-## Support
+**APA Format**:  
+Orhan, B. (2025). *Agentic GraphRAG for Test Scope Analysis in Telecommunications Software* [Master's thesis, Linköping University]. GitHub. https://github.com/yourusername/agentic-rag-test-scope-analysis
 
-For issues and questions:
+## Acknowledgments
+
+This research was conducted as part of a Master's Thesis program at Linköping University in collaboration with **Ericsson**.
+
+**Special Thanks**:
+- Ericsson Research Team
+- Linköping University Department of Computer Science
+
+## Support & Contact
+
+This is an academic research project with limited ongoing maintenance.
+
+**For academic questions or research collaboration**:
+- Email: Berkayorhan@hotmail.se
+- Student Email: Beror658@student.liu.se
+- GitHub Discussions: [repository-url]/discussions
+
+**For bug reports**:
 - GitHub Issues: [repository-url]/issues
-- Documentation: [documentation-url]
+
+**Note**: This project follows an academic timeline. Response times may vary based on thesis schedule and defense dates.
