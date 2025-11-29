@@ -125,6 +125,8 @@ class KeywordSearchTool(BaseTool):
                 lines.append(f"   Entity Type: {entity_type}")
             lines.append("")
 
-        lines.append("Note: BM25 (Best Matching 25) is a probabilistic ranking function for keyword search.")
+        lines.append(
+            "Note: BM25 (Best Matching 25) is a probabilistic ranking function for keyword search."
+        )
 
         return "\n".join(lines)

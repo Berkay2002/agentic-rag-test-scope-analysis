@@ -54,8 +54,7 @@ class BM25RetrieverManager:
             metadatas = [{} for _ in texts]
 
         documents = [
-            Document(page_content=text, metadata=meta)
-            for text, meta in zip(texts, metadatas)
+            Document(page_content=text, metadata=meta) for text, meta in zip(texts, metadatas)
         ]
         self.add_documents(documents)
 
