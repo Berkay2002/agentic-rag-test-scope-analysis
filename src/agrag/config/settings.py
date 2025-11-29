@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     google_thinking_level: Optional[str] = None
     google_thinking_budget: Optional[int] = None
     embedding_dimensions: int = 768
-    llm_timeout_seconds: int = 45
+    llm_timeout_seconds: int = 120
 
     # Neo4j Configuration
     neo4j_uri: Optional[str] = None

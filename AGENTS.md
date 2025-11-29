@@ -160,7 +160,7 @@ The `agrag chat` command starts an interactive REPL session similar to Claude Co
 
 **Example Chat Session:**
 ```
-🤖 AgRAG Interactive Chat
+AgRAG Interactive Chat
 
 Session ID: chat-a1b2c3d4
 Your conversation is automatically saved.
@@ -180,7 +180,7 @@ Approve? (yes/no/edit): yes
 🔧 Executing: vector_search
 📝 Found 8 results...
 
-🤖 Agent Response:
+Agent Response:
 Based on the search results, here are the test cases covering handover requirements:
 - TC_HANDOVER_001: X2 handover between eNodeBs
 - TC_HANDOVER_003: S1 handover validation
@@ -591,7 +591,7 @@ The agent wants to execute the following tools:
 Approve? (yes/no/edit): yes
 ✓ Approved. Continuing...
 
-🤖 Agent Response: [complete answer]
+Agent Response: [complete answer]
 ```
 
 ### When to Use Each Mode

@@ -3,6 +3,7 @@
 from typing import List, Dict, Any, Optional
 import psycopg
 from psycopg.rows import dict_row
+from pgvector import Vector
 from pgvector.psycopg import register_vector
 import logging
 
@@ -138,10 +139,12 @@ class PostgresClient:
         RETURNING chunk_id
         """
 
+        embedding_vector = Vector(embedding) if not isinstance(embedding, Vector) else embedding
+
         with self.conn.cursor() as cur:
             cur.execute(
                 query,
-                (chunk_id, content, embedding, psycopg.types.json.Json(metadata or {})),
+                (chunk_id, content, embedding_vector, psycopg.types.json.Json(metadata or {})),
             )
             self.conn.commit()
             result = cur.fetchone()
@@ -166,18 +169,19 @@ class PostgresClient:
         """
         self.connect()
 
-        # Base query
+        # Base query - cast to vector type explicitly
         query = """
         SELECT
             chunk_id,
             content,
             metadata,
-            embedding <=> %s AS distance,
-            1 - (embedding <=> %s) AS similarity
+            embedding <=> %s::vector AS distance,
+            1 - (embedding <=> %s::vector) AS similarity
         FROM document_chunks
         """
 
-        params = [query_embedding, query_embedding]
+        embedding_vector = Vector(query_embedding) if not isinstance(query_embedding, Vector) else query_embedding
+        params = [embedding_vector, embedding_vector]
 
         # Add metadata filter if provided
         if metadata_filter:
@@ -192,11 +196,16 @@ class PostgresClient:
         query += " ORDER BY distance LIMIT %s"
         params.append(k)
 
-        with self.conn.cursor() as cur:
-            cur.execute(query, params)
-            results = cur.fetchall()
-
-        return results
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(query, params)
+                results = cur.fetchall()
+            return results
+        except Exception as e:
+            # Rollback transaction on error
+            if self.conn and not self.conn.closed:
+                self.conn.rollback()
+            raise e
 
     def keyword_search(
         self,
@@ -244,11 +253,16 @@ class PostgresClient:
         query_sql += " ORDER BY rank DESC LIMIT %s"
         params.append(k)
 
-        with self.conn.cursor() as cur:
-            cur.execute(query_sql, params)
-            results = cur.fetchall()
-
-        return results
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(query_sql, params)
+                results = cur.fetchall()
+            return results
+        except Exception as e:
+            # Rollback transaction on error
+            if self.conn and not self.conn.closed:
+                self.conn.rollback()
+            raise e
 
     def hybrid_search(
         self,
@@ -273,11 +287,17 @@ class PostgresClient:
         Returns:
             List of documents ranked by RRF score
         """
-        # Get vector search results
-        vector_results = self.vector_search(query_embedding, k * 2, metadata_filter)
+        try:
+            # Get vector search results
+            vector_results = self.vector_search(query_embedding, k * 2, metadata_filter)
 
-        # Get keyword search results
-        keyword_results = self.keyword_search(query, k * 2, metadata_filter)
+            # Get keyword search results
+            keyword_results = self.keyword_search(query, k * 2, metadata_filter)
+        except Exception as e:
+            # Rollback transaction on error
+            if self.conn and not self.conn.closed:
+                self.conn.rollback()
+            raise e
 
         # Compute RRF scores
         rrf_scores: Dict[str, float] = {}

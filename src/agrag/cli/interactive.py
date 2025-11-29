@@ -132,7 +132,7 @@ class InteractiveChat:
     def _print_welcome(self):
         """Print welcome message."""
         welcome = """
-# 🤖 AgRAG Interactive Chat
+# AgRAG Interactive Chat
 
 Welcome to the Agentic GraphRAG Test Scope Analysis system!
 
@@ -341,43 +341,77 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
 
         try:
             # Create initial state
-            initial_state = create_initial_state(query)
+            pending_state: Optional[Dict[str, Any]] = create_initial_state(query)
 
-            # Stream the agent's execution
+            tool_calls_this_query = 0
+            model_calls_this_query = 0
+            last_state = None
+
+            # Stream the agent's execution (resume after each interrupt)
             with self.console.status("[bold green]Agent is thinking...") as status:
-                current_step = ""
-                tool_calls_this_query = 0
-                model_calls_this_query = 0
+                while True:
+                    interrupted = False
 
-                for event in self.graph.stream(initial_state, config=config, stream_mode="updates"):
-                    # Check for interrupts (HITL)
-                    if "__interrupt__" in event:
-                        status.stop()
-                        self._handle_interrupt(event, config)
+                    for event in self.graph.stream(
+                        pending_state, config=config, stream_mode="updates"
+                    ):
+                        # Initial state should only be sent once
+                        pending_state = None
+
+                        # Track last state
+                        last_state = event
+
+                        # Check for interrupts (HITL)
+                        if "__interrupt__" in event:
+                            status.stop()
+                            decision = self._handle_interrupt(event, config)
+                            # Resume streaming from the stored checkpoint
+                            interrupted = True
+                            status.start()
+                            status.update("[bold blue] Agent is reasoning...")
+                            break
+
+                        # Process events
+                        for node_name, node_state in event.items():
+                            if node_name == "call_model":
+                                model_calls_this_query += 1
+                                status.update("[bold blue] Agent is reasoning...")
+
+                            elif node_name == "execute_tools":
+                                tool_calls_this_query += 1
+                                # Extract tool names if available
+                                if "messages" in node_state:
+                                    messages = node_state["messages"]
+                                    for msg in messages:
+                                        if hasattr(msg, "tool_calls") and msg.tool_calls:
+                                            tool_names = [tc["name"] for tc in msg.tool_calls]
+                                            status.update(
+                                                f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}"
+                                            )
+
+                            elif node_name == "finalize_answer":
+                                status.update("[bold green]📝 Finalizing answer...")
+
+                    if interrupted:
+                        # Continue loop to consume the next portion of the stream
                         continue
 
-                    # Process events
-                    for node_name, node_state in event.items():
-                        if node_name == "call_model":
-                            model_calls_this_query += 1
-                            status.update("[bold blue]🧠 Agent is reasoning...")
+                    # Execution finished (END reached)
+                    break
 
-                        elif node_name == "execute_tools":
-                            tool_calls_this_query += 1
-                            # Extract tool names if available
-                            if "messages" in node_state:
-                                messages = node_state["messages"]
-                                for msg in messages:
-                                    if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                        tool_names = [tc["name"] for tc in msg.tool_calls]
-                                        status.update(f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}")
-
-                        elif node_name == "finalize_answer":
-                            status.update("[bold green]📝 Finalizing answer...")
-
-            # Get final state
-            final_state = self.graph.get_state(config)
-            final_answer = final_state.values.get("final_answer", "No answer generated")
+            # Get final state (only if checkpointer is available)
+            if self.checkpointer:
+                final_state = self.graph.get_state(config)
+                final_answer = final_state.values.get("final_answer", "No answer generated")
+            else:
+                # Extract from last event when no checkpointer
+                final_answer = "No answer generated"
+                if last_state and isinstance(last_state, dict):
+                    # Check for final_answer in any node state
+                    for node_data in last_state.values():
+                        if isinstance(node_data, dict) and "final_answer" in node_data:
+                            final_answer = node_data["final_answer"]
+                            break
 
             # Update stats
             self.tool_calls_total += tool_calls_this_query
@@ -385,12 +419,14 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
 
             # Display answer
             self.console.print()
-            self.console.print(Panel(
-                Markdown(final_answer),
-                title="🤖 Agent Response",
-                border_style="green",
-                padding=(1, 2),
-            ))
+            self.console.print(
+                Panel(
+                    Markdown(final_answer),
+                    title="Agent Response",
+                    border_style="green",
+                    padding=(1, 2),
+                )
+            )
 
             # Display mini stats
             stats_text = Text()
@@ -408,7 +444,7 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
             import traceback
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
-    def _extract_tool_calls(self, event: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _extract_tool_calls(self, event: Dict[str, Any], config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Collect proposed tool calls from an interrupt event."""
         tool_calls: List[Dict[str, Any]] = []
         for node_name, node_state in event.items():
@@ -425,9 +461,24 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
                             "name": call.get("name"),
                             "args": call.get("args", {}),
                         })
+
+        # Fallback: inspect current graph state if event payload lacked tool calls
+        if not tool_calls:
+            current_state = self.graph.get_state(config)
+            messages = current_state.values.get("messages", [])
+            if messages:
+                last_message = messages[-1]
+                if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                    for call in last_message.tool_calls:
+                        tool_calls.append({
+                            "node": "call_model",
+                            "name": call.get("name"),
+                            "args": call.get("args", {}),
+                        })
+
         return tool_calls
 
-    def _handle_interrupt(self, event: Dict[str, Any], config: Dict[str, Any]):
+    def _handle_interrupt(self, event: Dict[str, Any], config: Dict[str, Any]) -> str:
         """Handle HITL interrupt.
 
         Args:
@@ -435,7 +486,7 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
             config: The graph config.
         """
         self.console.print("\n[bold yellow]🚦 Approval Required[/bold yellow]\n")
-        tool_calls = self._extract_tool_calls(event)
+        tool_calls = self._extract_tool_calls(event, config)
 
         if tool_calls:
             self.console.print("[dim]The agent wants to execute the following tools:[/dim]\n")
@@ -459,17 +510,16 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
             ).strip().lower()
 
             if response in ["yes", "y"]:
-                self.graph.update_state(config, None)
                 self.console.print("[green]✓ Approved. Continuing...[/green]\n")
-                break
+                return "approve"
             elif response in ["no", "n"]:
                 self.graph.update_state(config, {"messages": [AIMessage("Action rejected by user")]})
                 self.console.print("[red]✗ Rejected. Stopping execution.[/red]\n")
-                break
+                return "reject"
             elif response == "edit":
                 self.console.print("[yellow]Editing not yet implemented. Rejecting...[/yellow]")
                 self.graph.update_state(config, {"messages": [AIMessage("Action rejected by user")]})
-                break
+                return "reject"
             else:
                 self.console.print("[yellow]Please respond with 'yes', 'no', or 'edit'[/yellow]")
 

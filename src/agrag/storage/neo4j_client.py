@@ -252,27 +252,27 @@ class Neo4jClient:
         Returns:
             List of paths with nodes and relationships
         """
-        # Build relationship pattern
+        # Build relationship pattern with quantifier
         if relationship_types:
             rel_types = "|".join([rt.value for rt in relationship_types])
-            rel_pattern = f"[:{rel_types}]"
+            rel_pattern = f":{rel_types}"
         else:
             rel_pattern = ""
-
-        # Build direction pattern
-        if direction == "outgoing":
-            pattern = f"-{rel_pattern}->"
-        elif direction == "incoming":
-            pattern = f"<-{rel_pattern}-"
-        else:  # both
-            pattern = f"-{rel_pattern}-"
 
         # Limit depth for safety
         depth = min(max(1, depth), settings.graph_traversal_max_depth)
 
+        # Build direction pattern with quantifier inside brackets
+        if direction == "outgoing":
+            pattern = f"-[{rel_pattern}*1..{depth}]->"
+        elif direction == "incoming":
+            pattern = f"<-[{rel_pattern}*1..{depth}]-"
+        else:  # both
+            pattern = f"-[{rel_pattern}*1..{depth}]-"
+
         query = f"""
         MATCH path = (start:{start_node_label.value} {{id: $start_id}})
-                     {pattern}*1..{depth}
+                     {pattern}
                      (end)
         RETURN path,
                start.id AS start_id,
