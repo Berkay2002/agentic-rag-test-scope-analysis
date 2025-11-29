@@ -23,6 +23,7 @@ packages = [{include = "agrag", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 langchain = "^1.1.0"
+langchain-community = "^0.4.1"
 langchain-google-genai = "^3.2.0"
 langgraph = "^1.0.0"
 langgraph-checkpoint = "^3.0.0"
@@ -39,6 +40,7 @@ scipy = "^1.13.0"
 click = "^8.1.0"
 rich = "^14.2.0"
 prompt-toolkit = "^3.0.0"
+rank-bm25 = "^0.2.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"

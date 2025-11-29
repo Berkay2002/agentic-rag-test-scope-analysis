@@ -1,41 +1,41 @@
-"""Keyword search tool for lexical retrieval using PostgreSQL full-text search."""
+"""Keyword search tool for lexical retrieval using BM25 algorithm."""
 
 import time
-from typing import Type
+from typing import Type, Optional
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 import logging
 
 from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
-from agrag.storage import PostgresClient
+from agrag.storage import BM25RetrieverManager
 
 logger = logging.getLogger(__name__)
 
 
 class KeywordSearchTool(BaseTool):
-    """Tool for keyword-based lexical search using PostgreSQL FTS."""
+    """Tool for keyword-based lexical search using BM25 algorithm."""
 
     name: str = "keyword_search"
-    description: str = """Use this tool for exact matches and lexical queries.
+    description: str = """Use this tool for exact matches and lexical queries using BM25 ranking.
     Best for:
     - Specific identifiers (test IDs, function names, error codes)
-    - Exact keyword matching
+    - Exact keyword matching with probabilistic ranking
     - When you know the specific terms that should appear
     Examples: "TestLoginTimeout", "error code E503", "initiate_handover"
     """
     args_schema: Type[BaseModel] = KeywordSearchInput
 
-    postgres_client: PostgresClient = None
+    bm25_manager: Optional[BM25RetrieverManager] = None
 
-    def __init__(self, postgres_client: PostgresClient = None, **kwargs):
+    def __init__(self, bm25_manager: BM25RetrieverManager = None, **kwargs):
         """
-        Initialize keyword search tool.
+        Initialize keyword search tool with BM25.
 
         Args:
-            postgres_client: PostgreSQL client instance (creates new if not provided)
+            bm25_manager: BM25 retriever manager instance (creates new if not provided)
         """
         super().__init__(**kwargs)
-        self.postgres_client = postgres_client or PostgresClient()
+        self.bm25_manager = bm25_manager or BM25RetrieverManager(k=10)
 
     def _run(
         self,
@@ -44,7 +44,7 @@ class KeywordSearchTool(BaseTool):
         entity_type: str = None,
     ) -> str:
         """
-        Execute keyword search.
+        Execute BM25 keyword search.
 
         Args:
             query: Keyword query string
@@ -62,9 +62,9 @@ class KeywordSearchTool(BaseTool):
             if entity_type:
                 metadata_filter["entity_type"] = entity_type
 
-            # Perform keyword search in PostgreSQL
-            logger.info(f"Performing keyword search: {query}")
-            results = self.postgres_client.keyword_search(
+            # Perform BM25 search
+            logger.info(f"Performing BM25 keyword search: {query}")
+            results = self.bm25_manager.search(
                 query=query,
                 k=k,
                 metadata_filter=metadata_filter if metadata_filter else None,
@@ -76,9 +76,9 @@ class KeywordSearchTool(BaseTool):
                 search_result = SearchResult(
                     id=result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
-                    score=float(result.get("rank", 0.0)),
+                    score=float(result.get("score", 0.0)),
                     metadata=result.get("metadata", {}),
-                    source="keyword",
+                    source="bm25",
                 )
                 search_results.append(search_result)
 
@@ -95,8 +95,8 @@ class KeywordSearchTool(BaseTool):
             return self._format_output(output)
 
         except Exception as e:
-            logger.error(f"Keyword search failed: {e}")
-            return f"Error performing keyword search: {str(e)}"
+            logger.error(f"BM25 keyword search failed: {e}")
+            return f"Error performing BM25 keyword search: {str(e)}"
 
     def _format_output(self, output: KeywordSearchOutput) -> str:
         """
@@ -112,17 +112,19 @@ class KeywordSearchTool(BaseTool):
             return f"No results found for query: '{output.query}'"
 
         lines = [
-            f"Keyword Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
+            f"BM25 Keyword Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
             f"Query: {output.query}",
             "",
         ]
 
         for i, result in enumerate(output.results, 1):
-            lines.append(f"{i}. ID: {result.id} (Rank Score: {result.score:.4f})")
+            lines.append(f"{i}. ID: {result.id} (BM25 Score: {result.score:.4f})")
             lines.append(f"   Content: {result.content[:200]}...")
             if result.metadata:
                 entity_type = result.metadata.get("entity_type", "Unknown")
                 lines.append(f"   Entity Type: {entity_type}")
             lines.append("")
+
+        lines.append("Note: BM25 (Best Matching 25) is a probabilistic ranking function for keyword search.")
 
         return "\n".join(lines)
