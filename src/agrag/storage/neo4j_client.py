@@ -1,7 +1,7 @@
 """Neo4j client for graph operations and vector search."""
 
 from typing import List, Dict, Any, Optional
-from neo4j import GraphDatabase, Driver, Session
+from neo4j import GraphDatabase, Driver
 import logging
 
 from agrag.config import settings
@@ -42,9 +42,7 @@ class Neo4jClient:
         if not self.uri or not self.password:
             raise ValueError("Neo4j URI and password must be provided")
 
-        self.driver: Driver = GraphDatabase.driver(
-            self.uri, auth=(self.username, self.password)
-        )
+        self.driver: Driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
         logger.info(f"Neo4j client initialized for {self.uri}")
 
     def close(self) -> None:
@@ -200,7 +198,7 @@ class Neo4jClient:
         """
         index_name = f"{node_label.value.lower()}_embeddings"
 
-        query = f"""
+        query = """
         CALL db.index.vector.queryNodes($index_name, $k, $query_embedding)
         YIELD node, score
         WHERE score >= $threshold
@@ -222,12 +220,14 @@ class Neo4jClient:
             results = []
             for record in result:
                 node_data = dict(record["node"])
-                results.append({
-                    "node": node_data,
-                    "score": record["score"],
-                    "id": node_data.get("id"),
-                    "label": node_label.value,
-                })
+                results.append(
+                    {
+                        "node": node_data,
+                        "score": record["score"],
+                        "id": node_data.get("id"),
+                        "label": node_label.value,
+                    }
+                )
 
             return results
 
@@ -288,13 +288,15 @@ class Neo4jClient:
 
             paths = []
             for record in result:
-                paths.append({
-                    "start_id": record["start_id"],
-                    "end_id": record["end_id"],
-                    "end_labels": record["end_labels"],
-                    "depth": record["depth"],
-                    "path": record["path"],
-                })
+                paths.append(
+                    {
+                        "start_id": record["start_id"],
+                        "end_id": record["end_id"],
+                        "end_labels": record["end_labels"],
+                        "depth": record["depth"],
+                        "path": record["path"],
+                    }
+                )
 
             return paths
 

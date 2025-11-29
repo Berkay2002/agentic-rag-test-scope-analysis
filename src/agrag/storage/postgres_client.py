@@ -33,7 +33,7 @@ class PostgresClient:
 
     def connect(self, register_types: bool = True) -> None:
         """Establish connection to PostgreSQL database.
-        
+
         Args:
             register_types: Whether to register pgvector types (set False if extension not yet created)
         """
@@ -180,7 +180,9 @@ class PostgresClient:
         FROM document_chunks
         """
 
-        embedding_vector = Vector(query_embedding) if not isinstance(query_embedding, Vector) else query_embedding
+        embedding_vector = (
+            Vector(query_embedding) if not isinstance(query_embedding, Vector) else query_embedding
+        )
         params = [embedding_vector, embedding_vector]
 
         # Add metadata filter if provided

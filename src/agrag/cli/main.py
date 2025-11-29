@@ -11,7 +11,6 @@ from agrag.config import setup_logging, settings
 from agrag.storage import Neo4jClient, PostgresClient
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
-from agrag.kg.ontology import NEO4J_CONSTRAINTS, NEO4J_VECTOR_INDEXES, POSTGRESQL_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ def init():
         click.echo("\n✓ All schemas initialized successfully!")
         click.echo("\nNext steps:")
         click.echo("  1. Load your data using the data ingestion module")
-        click.echo("  2. Run queries with: agrag query \"your question\"")
+        click.echo('  2. Run queries with: agrag query "your question"')
 
     except Exception as e:
         click.echo(f"\n✗ Error initializing schemas: {e}", err=True)
@@ -177,9 +176,7 @@ def query(
                     "[Checkpointer] Persistence unavailable; continuing without HITL approvals."
                 )
                 if thread_id:
-                    click.echo(
-                        "[Thread] thread_id ignored because no checkpointer is active."
-                    )
+                    click.echo("[Thread] thread_id ignored because no checkpointer is active.")
 
         # Create graph
         graph = create_agent_graph(checkpointer=checkpointer)
@@ -290,10 +287,12 @@ def evaluate(dataset: str, output: str, k_values: str):
             retrieved = []  # Would run actual retrieval here
 
             metrics = evaluate_retrieval(retrieved, relevant, k_values=k_list)
-            all_results.append({
-                "retrieved": retrieved,
-                "relevant": relevant,
-            })
+            all_results.append(
+                {
+                    "retrieved": retrieved,
+                    "relevant": relevant,
+                }
+            )
 
             # Log metrics
             for metric_name, score in metrics.items():
@@ -301,16 +300,20 @@ def evaluate(dataset: str, output: str, k_values: str):
 
         # Calculate aggregate metrics
         map_score = mean_average_precision(all_results)
-        click.echo(f"\n--- Aggregate Metrics ---")
+        click.echo("\n--- Aggregate Metrics ---")
         click.echo(f"MAP: {map_score:.4f}")
 
         # Save results
         with open(output, "w") as f:
-            json.dump({
-                "queries": len(queries),
-                "map": map_score,
-                "per_query_results": all_results,
-            }, f, indent=2)
+            json.dump(
+                {
+                    "queries": len(queries),
+                    "map": map_score,
+                    "per_query_results": all_results,
+                },
+                f,
+                indent=2,
+            )
 
         click.echo(f"\n✓ Results saved to: {output}")
 
@@ -361,15 +364,13 @@ def info():
 
 
 @cli.command()
-@click.confirmation_option(
-    prompt="Are you sure you want to delete ALL data from both databases?"
-)
+@click.confirmation_option(prompt="Are you sure you want to delete ALL data from both databases?")
 def reset():
     """Delete all data from Neo4j and PostgreSQL databases.
-    
+
     WARNING: This will permanently delete all entities, relationships,
     and embeddings. This action cannot be undone.
-    
+
     Use this before ingesting a new dataset to avoid duplicates.
     """
     click.echo("\n=== Resetting Databases ===\n")
@@ -402,10 +403,10 @@ def reset():
 @click.option("--output", default="data/synthetic_dataset.json", help="Output file path")
 def generate(requirements: int, testcases: int, output: str):
     """Generate synthetic telecommunications dataset.
-    
+
     Creates realistic synthetic data including requirements, test cases,
     functions, classes, modules, and their relationships.
-    
+
     Examples:
       agrag generate
       agrag generate --requirements 30 --testcases 150
@@ -413,7 +414,7 @@ def generate(requirements: int, testcases: int, output: str):
     """
     from agrag.data.generators import TelecomDataGenerator
 
-    click.echo(f"\n=== Generating Synthetic Dataset ===\n")
+    click.echo("\n=== Generating Synthetic Dataset ===\n")
     click.echo(f"Requirements: {requirements}")
     click.echo(f"Test cases: {testcases}")
     click.echo(f"Output: {output}\n")
@@ -421,12 +422,11 @@ def generate(requirements: int, testcases: int, output: str):
     try:
         # Create generator
         generator = TelecomDataGenerator()
-        
+
         # Generate dataset
         click.echo("Generating entities (this may take a few minutes)...")
         dataset = generator.generate_full_dataset(
-            requirement_count=requirements,
-            testcase_count=testcases
+            requirement_count=requirements, testcase_count=testcases
         )
 
         # Create output directory if needed
@@ -439,8 +439,8 @@ def generate(requirements: int, testcases: int, output: str):
 
         # Display summary
         metadata = dataset.get("metadata", {})
-        click.echo(f"\n✓ Dataset generated successfully!")
-        click.echo(f"\nSummary:")
+        click.echo("\n✓ Dataset generated successfully!")
+        click.echo("\nSummary:")
         click.echo(f"  Requirements: {metadata.get('requirement_count', 0)}")
         click.echo(f"  Test cases: {metadata.get('testcase_count', 0)}")
         click.echo(f"  Functions: {metadata.get('function_count', 0)}")
@@ -460,16 +460,16 @@ def generate(requirements: int, testcases: int, output: str):
 @click.argument("dataset_path")
 def ingest(dataset_path: str):
     """Ingest dataset into Neo4j and PostgreSQL.
-    
+
     Loads a previously generated synthetic dataset into both databases.
     The dataset should be a JSON file created by the 'generate' command.
-    
+
     Examples:
       agrag ingest data/synthetic_dataset.json
     """
     from agrag.data.ingestion import DataIngestion
 
-    click.echo(f"\n=== Ingesting Dataset ===\n")
+    click.echo("\n=== Ingesting Dataset ===\n")
     click.echo(f"Dataset: {dataset_path}\n")
 
     try:
@@ -480,7 +480,7 @@ def ingest(dataset_path: str):
 
         entities_count = len(dataset.get("entities", []))
         relationships_count = len(dataset.get("relationships", []))
-        
+
         click.echo(f"Loaded {entities_count} entities and {relationships_count} relationships\n")
 
         # Ingest data
@@ -489,13 +489,13 @@ def ingest(dataset_path: str):
         results = ingestion.ingest_full_dataset(dataset)
 
         # Display results
-        click.echo(f"\n✓ Ingestion complete!")
-        click.echo(f"\nResults:")
+        click.echo("\n✓ Ingestion complete!")
+        click.echo("\nResults:")
         click.echo(f"  Neo4j entities: {results['neo4j_entities']}")
         click.echo(f"  PostgreSQL entities: {results['postgres_entities']}")
         click.echo(f"  Relationships: {results['relationships']}")
-        
-        click.echo(f"\nNext step: agrag query \"What tests cover handover requirements?\"")
+
+        click.echo('\nNext step: agrag query "What tests cover handover requirements?"')
 
     except Exception as e:
         click.echo(f"\n✗ Ingestion failed: {e}", err=True)

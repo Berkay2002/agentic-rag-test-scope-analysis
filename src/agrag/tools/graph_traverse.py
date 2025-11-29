@@ -14,7 +14,6 @@ from agrag.tools.schemas import (
 )
 from agrag.storage import Neo4jClient
 from agrag.kg.ontology import NodeLabel, RelationshipType
-from agrag.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +129,7 @@ class GraphTraverseTool(BaseTool):
                         id=node_dict.get("id", "unknown"),
                         label=node_labels[0] if node_labels else "Unknown",
                         properties={
-                            k: v for k, v in node_dict.items()
-                            if k not in ["embedding", "id"]
+                            k: v for k, v in node_dict.items() if k not in ["embedding", "id"]
                         },
                     )
                     nodes.append(graph_node)
@@ -173,9 +171,7 @@ class GraphTraverseTool(BaseTool):
             lines.append(f"{i}. Path (depth {path.depth}): {path.start_id} → {path.end_id}")
 
             # Show node sequence
-            node_sequence = " → ".join([
-                f"{node.label}:{node.id}" for node in path.nodes
-            ])
+            node_sequence = " → ".join([f"{node.label}:{node.id}" for node in path.nodes])
             lines.append(f"   Sequence: {node_sequence}")
 
             # Show end node details if available
@@ -184,8 +180,10 @@ class GraphTraverseTool(BaseTool):
                 if end_node.properties:
                     # Show most relevant properties
                     relevant_props = {
-                        k: v for k, v in end_node.properties.items()
-                        if k in ["name", "description", "status", "priority", "test_type", "signature"]
+                        k: v
+                        for k, v in end_node.properties.items()
+                        if k
+                        in ["name", "description", "status", "priority", "test_type", "signature"]
                     }
                     if relevant_props:
                         prop_str = ", ".join([f"{k}: {v}" for k, v in relevant_props.items()])

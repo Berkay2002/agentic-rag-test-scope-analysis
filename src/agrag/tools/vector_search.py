@@ -9,7 +9,6 @@ import logging
 from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
 from agrag.storage import Neo4jClient
 from agrag.models import get_embedding_service
-from agrag.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +68,7 @@ class VectorSearchTool(BaseTool):
 
             # Map string to NodeLabel enum
             from agrag.kg.ontology import NodeLabel
+
             try:
                 node_label = NodeLabel[node_type.upper().replace("TESTCASE", "TEST_CASE")]
             except KeyError:
@@ -138,7 +138,9 @@ class VectorSearchTool(BaseTool):
             lines.append(f"{i}. ID: {result.id} (Score: {result.score:.4f})")
             lines.append(f"   Content: {result.content[:200]}...")
             if result.metadata:
-                meta_str = ", ".join([f"{k}: {v}" for k, v in result.metadata.items() if k != "label"])
+                meta_str = ", ".join(
+                    [f"{k}: {v}" for k, v in result.metadata.items() if k != "label"]
+                )
                 if meta_str:
                     lines.append(f"   Metadata: {meta_str}")
             lines.append("")

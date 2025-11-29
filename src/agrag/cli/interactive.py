@@ -14,8 +14,6 @@ from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.live import Live
-from rich.spinner import Spinner
 from rich.text import Text
 
 from langchain_core.messages import AIMessage
@@ -237,7 +235,9 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
 
 Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e.g., `/thinking 512`).
 """
-        self.console.print(Panel(Markdown(help_text), title="Thinking Configuration", border_style="magenta"))
+        self.console.print(
+            Panel(Markdown(help_text), title="Thinking Configuration", border_style="magenta")
+        )
 
     def _handle_thinking_command(self, raw_command: str):
         """Handle the /thinking command."""
@@ -305,14 +305,18 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
             self.tool_calls_total = 0
             self.model_calls_total = 0
             self.start_time = datetime.now()
-            self.console.print(f"[green]✓ Conversation reset. New session: {self.thread_id}[/green]")
+            self.console.print(
+                f"[green]✓ Conversation reset. New session: {self.thread_id}[/green]"
+            )
 
         elif command == "/save":
             # Save conversation to file
-            filename = f"conversation_{self.thread_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            filename = (
+                f"conversation_{self.thread_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            )
             try:
                 with open(filename, "w") as f:
-                    f.write(f"AgRAG Conversation\n")
+                    f.write("AgRAG Conversation\n")
                     f.write(f"Session ID: {self.thread_id}\n")
                     f.write(f"Date: {datetime.now().isoformat()}\n")
                     f.write("=" * 80 + "\n\n")
@@ -364,11 +368,11 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
                         # Check for interrupts (HITL)
                         if "__interrupt__" in event:
                             status.stop()
-                            decision = self._handle_interrupt(event, config)
+                            self._handle_interrupt(event, config)
                             # Resume streaming from the stored checkpoint
                             interrupted = True
                             status.start()
-                            status.update("[bold blue] Agent is reasoning...")
+                            status.update("[bold blue]Agent is reasoning...")
                             break
 
                         # Process events
@@ -442,9 +446,12 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
         except Exception as e:
             self.console.print(f"\n[red]✗ Error: {e}[/red]\n")
             import traceback
+
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
-    def _extract_tool_calls(self, event: Dict[str, Any], config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _extract_tool_calls(
+        self, event: Dict[str, Any], config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """Collect proposed tool calls from an interrupt event."""
         tool_calls: List[Dict[str, Any]] = []
         for node_name, node_state in event.items():
@@ -456,11 +463,13 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
             for message in messages:
                 if hasattr(message, "tool_calls") and message.tool_calls:
                     for call in message.tool_calls:
-                        tool_calls.append({
-                            "node": node_name,
-                            "name": call.get("name"),
-                            "args": call.get("args", {}),
-                        })
+                        tool_calls.append(
+                            {
+                                "node": node_name,
+                                "name": call.get("name"),
+                                "args": call.get("args", {}),
+                            }
+                        )
 
         # Fallback: inspect current graph state if event payload lacked tool calls
         if not tool_calls:
@@ -470,11 +479,13 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
                 last_message = messages[-1]
                 if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                     for call in last_message.tool_calls:
-                        tool_calls.append({
-                            "node": "call_model",
-                            "name": call.get("name"),
-                            "args": call.get("args", {}),
-                        })
+                        tool_calls.append(
+                            {
+                                "node": "call_model",
+                                "name": call.get("name"),
+                                "args": call.get("args", {}),
+                            }
+                        )
 
         return tool_calls
 
@@ -504,21 +515,29 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
 
         # Ask for approval
         while True:
-            response = self.session.prompt(
-                "Approve? (yes/no/edit): ",
-                style=self.style,
-            ).strip().lower()
+            response = (
+                self.session.prompt(
+                    "Approve? (yes/no/edit): ",
+                    style=self.style,
+                )
+                .strip()
+                .lower()
+            )
 
             if response in ["yes", "y"]:
                 self.console.print("[green]✓ Approved. Continuing...[/green]\n")
                 return "approve"
             elif response in ["no", "n"]:
-                self.graph.update_state(config, {"messages": [AIMessage("Action rejected by user")]})
+                self.graph.update_state(
+                    config, {"messages": [AIMessage("Action rejected by user")]}
+                )
                 self.console.print("[red]✗ Rejected. Stopping execution.[/red]\n")
                 return "reject"
             elif response == "edit":
                 self.console.print("[yellow]Editing not yet implemented. Rejecting...[/yellow]")
-                self.graph.update_state(config, {"messages": [AIMessage("Action rejected by user")]})
+                self.graph.update_state(
+                    config, {"messages": [AIMessage("Action rejected by user")]}
+                )
                 return "reject"
             else:
                 self.console.print("[yellow]Please respond with 'yes', 'no', or 'edit'[/yellow]")
@@ -561,6 +580,7 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
         except Exception as e:
             self.console.print(f"\n[red]Fatal error: {e}[/red]\n")
             import traceback
+
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
             sys.exit(1)
 

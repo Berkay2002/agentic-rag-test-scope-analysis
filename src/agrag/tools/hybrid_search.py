@@ -9,7 +9,6 @@ import logging
 from agrag.tools.schemas import HybridSearchInput, HybridSearchOutput, SearchResult
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
-from agrag.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -11,8 +11,10 @@ from enum import Enum
 
 # Enums for controlled vocabularies
 
+
 class Priority(str, Enum):
     """Requirement priority levels."""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -21,6 +23,7 @@ class Priority(str, Enum):
 
 class RequirementStatus(str, Enum):
     """Requirement lifecycle status."""
+
     DRAFT = "draft"
     APPROVED = "approved"
     IMPLEMENTED = "implemented"
@@ -30,6 +33,7 @@ class RequirementStatus(str, Enum):
 
 class TestType(str, Enum):
     """Types of test cases."""
+
     UNIT = "unit"
     INTEGRATION = "integration"
     SYSTEM = "system"
@@ -40,6 +44,7 @@ class TestType(str, Enum):
 
 class NodeLabel(str, Enum):
     """Neo4j node labels."""
+
     REQUIREMENT = "Requirement"
     TEST_CASE = "TestCase"
     FUNCTION = "Function"
@@ -49,6 +54,7 @@ class NodeLabel(str, Enum):
 
 class RelationshipType(str, Enum):
     """Neo4j relationship types."""
+
     VERIFIES = "VERIFIES"  # TestCase -> Requirement
     COVERS = "COVERS"  # TestCase -> Function
     CALLS = "CALLS"  # Function -> Function
@@ -61,13 +67,19 @@ class RelationshipType(str, Enum):
 
 # Entity Models
 
+
 class Requirement(BaseModel):
     """Software requirement entity."""
+
     id: str = Field(..., description="Unique requirement identifier (e.g., REQ_001)")
     description: str = Field(..., description="Requirement text")
     priority: Priority = Field(default=Priority.MEDIUM, description="Priority level")
-    status: RequirementStatus = Field(default=RequirementStatus.DRAFT, description="Lifecycle status")
-    category: Optional[str] = Field(None, description="Requirement category (e.g., 'handover', 'signaling')")
+    status: RequirementStatus = Field(
+        default=RequirementStatus.DRAFT, description="Lifecycle status"
+    )
+    category: Optional[str] = Field(
+        None, description="Requirement category (e.g., 'handover', 'signaling')"
+    )
     embedding: Optional[List[float]] = Field(None, description="Vector embedding (768-dim)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
@@ -85,6 +97,7 @@ class Requirement(BaseModel):
 
 class TestCase(BaseModel):
     """Test case entity."""
+
     id: str = Field(..., description="Unique test case identifier (e.g., TC_001)")
     name: str = Field(..., description="Test case name")
     description: str = Field(..., description="Test case description")
@@ -111,6 +124,7 @@ class TestCase(BaseModel):
 
 class Function(BaseModel):
     """Function/method entity."""
+
     id: str = Field(..., description="Unique function identifier")
     name: str = Field(..., description="Function name")
     signature: str = Field(..., description="Full function signature")
@@ -136,6 +150,7 @@ class Function(BaseModel):
 
 class Class(BaseModel):
     """Class entity."""
+
     id: str = Field(..., description="Unique class identifier")
     name: str = Field(..., description="Class name")
     file_path: str = Field(..., description="Source file path")
@@ -159,6 +174,7 @@ class Class(BaseModel):
 
 class Module(BaseModel):
     """Module/package entity."""
+
     id: str = Field(..., description="Unique module identifier")
     name: str = Field(..., description="Module name")
     file_path: str = Field(..., description="Module file path")
@@ -181,8 +197,10 @@ class Module(BaseModel):
 
 # Relationship Models
 
+
 class Relationship(BaseModel):
     """Base relationship model."""
+
     source_id: str = Field(..., description="Source node ID")
     target_id: str = Field(..., description="Target node ID")
     relationship_type: RelationshipType = Field(..., description="Relationship type")
@@ -191,29 +209,34 @@ class Relationship(BaseModel):
 
 class VerifiesRelationship(Relationship):
     """TestCase verifies Requirement."""
+
     relationship_type: Literal[RelationshipType.VERIFIES] = RelationshipType.VERIFIES
     coverage_percentage: Optional[float] = Field(None, description="Coverage percentage (0-100)")
 
 
 class CoversRelationship(Relationship):
     """TestCase covers Function."""
+
     relationship_type: Literal[RelationshipType.COVERS] = RelationshipType.COVERS
     direct_coverage: bool = Field(True, description="Direct vs transitive coverage")
 
 
 class CallsRelationship(Relationship):
     """Function calls Function."""
+
     relationship_type: Literal[RelationshipType.CALLS] = RelationshipType.CALLS
     call_count: Optional[int] = Field(None, description="Number of calls (if known)")
 
 
 class DefinedInRelationship(Relationship):
     """Function defined in Class."""
+
     relationship_type: Literal[RelationshipType.DEFINED_IN] = RelationshipType.DEFINED_IN
 
 
 class InheritsFromRelationship(Relationship):
     """Class inherits from Class."""
+
     relationship_type: Literal[RelationshipType.INHERITS_FROM] = RelationshipType.INHERITS_FROM
 
 

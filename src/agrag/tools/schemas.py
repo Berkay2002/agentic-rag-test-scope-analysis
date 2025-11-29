@@ -8,6 +8,7 @@ from agrag.kg.ontology import NodeLabel, RelationshipType
 
 # Input Schemas for Tools
 
+
 class VectorSearchInput(BaseModel):
     """Input schema for vector search tool."""
 
@@ -113,6 +114,7 @@ class HybridSearchInput(BaseModel):
 
 
 # Output Schemas
+
 
 class SearchResult(BaseModel):
     """Single search result."""

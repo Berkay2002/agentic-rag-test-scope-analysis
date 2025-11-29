@@ -112,9 +112,7 @@ class Settings(BaseSettings):
     def validate_langsmith_config(self) -> None:
         """Validate LangSmith configuration."""
         if self.langchain_tracing_v2 and not self.langchain_api_key:
-            raise ValueError(
-                "LANGCHAIN_API_KEY must be set when LangSmith tracing is enabled"
-            )
+            raise ValueError("LANGCHAIN_API_KEY must be set when LangSmith tracing is enabled")
 
     @field_validator("google_thinking_level")
     @classmethod

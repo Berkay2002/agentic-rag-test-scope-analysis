@@ -3,7 +3,7 @@
 import logging
 from typing import List, Any
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 from agrag.core.state import AgentState

@@ -8,7 +8,6 @@ import logging
 
 from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
 from agrag.storage import PostgresClient
-from agrag.config import settings
 
 logger = logging.getLogger(__name__)
 
