@@ -1,6 +1,6 @@
 # Agentic GraphRAG for Test Scope Analysis
 
-[![Research](https://img.shields.io/badge/Research-Master's%20Thesis-blue.svg)](https://github.com/yourusername/agentic-rag-test-scope-analysis)
+[![Research](https://img.shields.io/badge/Research-Master's%20Thesis-blue.svg)](https://github.com/Berkay2002/agentic-rag-test-scope-analysis)
 [![License](https://img.shields.io/badge/License-Academic%20Research-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -425,12 +425,12 @@ If you use this work in your research, please cite:
   school = {Linköping University},
   year = {2025},
   note = {Master's Thesis, in collaboration with Ericsson},
-  url = {https://github.com/yourusername/agentic-rag-test-scope-analysis}
+  url = {https://github.com/Berkay2002/agentic-rag-test-scope-analysis}
 }
 ```
 
 **APA Format**:  
-Orhan, B. (2025). *Agentic GraphRAG for Test Scope Analysis in Telecommunications Software* [Master's thesis, Linköping University]. GitHub. https://github.com/yourusername/agentic-rag-test-scope-analysis
+Orhan, B. (2025). *Agentic GraphRAG for Test Scope Analysis in Telecommunications Software* [Master's thesis, Linköping University]. GitHub. https://github.com/Berkay2002/agentic-rag-test-scope-analysis
 
 ## Acknowledgments
 
@@ -447,9 +447,9 @@ This is an academic research project with limited ongoing maintenance.
 **For academic questions or research collaboration**:
 - Email: Berkayorhan@hotmail.se
 - Student Email: Beror658@student.liu.se
-- GitHub Discussions: [repository-url]/discussions
+- GitHub Discussions: https://github.com/Berkay2002/agentic-rag-test-scope-analysis/discussions
 
 **For bug reports**:
-- GitHub Issues: [repository-url]/issues
+- GitHub Issues: https://github.com/Berkay2002/agentic-rag-test-scope-analysis/issues
 
 **Note**: This project follows an academic timeline. Response times may vary based on thesis schedule and defense dates.

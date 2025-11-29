@@ -73,7 +73,7 @@ If you use this work, please cite:
   school = {Linköping University},
   year = {2025},
   note = {In collaboration with Ericsson},
-  url = {https://github.com/yourusername/agentic-rag-test-scope-analysis}
+  url = {https://github.com/Berkay2002/agentic-rag-test-scope-analysis}
 }
 ```
 
