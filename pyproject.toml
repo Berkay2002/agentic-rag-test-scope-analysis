@@ -1,9 +1,23 @@
 [tool.poetry]
 name = "agrag"
 version = "0.1.0"
-description = "Agentic GraphRAG System for Test Scope Analysis"
-authors = ["Your Name <your.email@example.com>"]
+description = "Agentic GraphRAG System for Test Scope Analysis - Master's Thesis Research Project"
+authors = ["Berkay Orhan <Berkayorhan@hotmail.se>"]
+license = "SEE LICENSE IN LICENSE FILE"
+repository = "https://github.com/yourusername/agentic-rag-test-scope-analysis"
+homepage = "https://github.com/yourusername/agentic-rag-test-scope-analysis"
 readme = "README.md"
+keywords = ["rag", "knowledge-graph", "langgraph", "test-analysis", "agentic-ai", "neo4j", "master-thesis", "academic-research"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
 packages = [{include = "agrag", from = "src"}]
 
 [tool.poetry.dependencies]
