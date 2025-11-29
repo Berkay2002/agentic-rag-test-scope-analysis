@@ -210,34 +210,34 @@ class Relationship(BaseModel):
 class VerifiesRelationship(Relationship):
     """TestCase verifies Requirement."""
 
-    relationship_type: Literal[RelationshipType.VERIFIES] = RelationshipType.VERIFIES
+    relationship_type: Literal[RelationshipType.VERIFIES] = RelationshipType.VERIFIES  # type: ignore[assignment]
     coverage_percentage: Optional[float] = Field(None, description="Coverage percentage (0-100)")
 
 
 class CoversRelationship(Relationship):
     """TestCase covers Function."""
 
-    relationship_type: Literal[RelationshipType.COVERS] = RelationshipType.COVERS
+    relationship_type: Literal[RelationshipType.COVERS] = RelationshipType.COVERS  # type: ignore[assignment]
     direct_coverage: bool = Field(True, description="Direct vs transitive coverage")
 
 
 class CallsRelationship(Relationship):
     """Function calls Function."""
 
-    relationship_type: Literal[RelationshipType.CALLS] = RelationshipType.CALLS
+    relationship_type: Literal[RelationshipType.CALLS] = RelationshipType.CALLS  # type: ignore[assignment]
     call_count: Optional[int] = Field(None, description="Number of calls (if known)")
 
 
 class DefinedInRelationship(Relationship):
     """Function defined in Class."""
 
-    relationship_type: Literal[RelationshipType.DEFINED_IN] = RelationshipType.DEFINED_IN
+    relationship_type: Literal[RelationshipType.DEFINED_IN] = RelationshipType.DEFINED_IN  # type: ignore[assignment]
 
 
 class InheritsFromRelationship(Relationship):
     """Class inherits from Class."""
 
-    relationship_type: Literal[RelationshipType.INHERITS_FROM] = RelationshipType.INHERITS_FROM
+    relationship_type: Literal[RelationshipType.INHERITS_FROM] = RelationshipType.INHERITS_FROM  # type: ignore[assignment]
 
 
 # Graph Schema Constants
@@ -278,8 +278,11 @@ NEO4J_VECTOR_INDEXES = [
 ]
 
 POSTGRESQL_SCHEMA = """
--- Enable pgvector extension
+-- Enable pgvector extension for vector similarity search
 CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Enable pg_search extension for true BM25 full-text search
+CREATE EXTENSION IF NOT EXISTS pg_search;
 
 -- Document chunks table for vector and keyword search
 CREATE TABLE IF NOT EXISTS document_chunks (
@@ -292,13 +295,15 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Vector similarity index (HNSW)
+-- Vector similarity index (HNSW via pgvector)
 CREATE INDEX IF NOT EXISTS document_chunks_embedding_idx
 ON document_chunks USING hnsw (embedding vector_cosine_ops);
 
--- Full-text search index (BM25-style)
-CREATE INDEX IF NOT EXISTS document_chunks_content_fts_idx
-ON document_chunks USING gin(to_tsvector('english', content));
+-- BM25 full-text search index (via pg_search/ParadeDB)
+-- This provides true BM25 ranking, not TF-IDF like ts_rank_cd
+CREATE INDEX IF NOT EXISTS document_chunks_bm25_idx
+ON document_chunks USING bm25 (id, chunk_id, content, metadata)
+WITH (key_field = 'id');
 
 -- Metadata GIN index for filtering
 CREATE INDEX IF NOT EXISTS document_chunks_metadata_idx

@@ -1,12 +1,13 @@
 """StateGraph definition for agentic RAG system."""
 
 import logging
-from typing import List, Literal
+from typing import List, Literal, Optional
 from functools import partial
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import StateGraph, END
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
 
 from agrag.core.state import AgentState
@@ -197,7 +198,7 @@ def route_after_model(
 
 def route_after_tools(
     state: AgentState,
-) -> Literal["call_model", "finalize", END]:
+) -> Literal["call_model", "finalize", "__end__"]:
     """
     Route after tool execution based on safety limits.
 
@@ -228,10 +229,10 @@ def route_after_tools(
 
 
 def create_agent_graph(
-    checkpointer: PostgresSaver = None,
-    neo4j_client: Neo4jClient = None,
-    postgres_client: PostgresClient = None,
-) -> StateGraph:
+    checkpointer: Optional[PostgresSaver] = None,
+    neo4j_client: Optional[Neo4jClient] = None,
+    postgres_client: Optional[PostgresClient] = None,
+) -> CompiledStateGraph:
     """
     Create the StateGraph for the agentic RAG system.
 
@@ -250,8 +251,12 @@ def create_agent_graph(
     postgres = postgres_client or PostgresClient()
 
     # Initialize tools
+    # - VectorSearchTool: uses PostgreSQL pgvector HNSW index
+    # - KeywordSearchTool: uses PostgreSQL pg_search BM25 index
+    # - GraphTraverseTool: uses Neo4j graph traversal (relationships only)
+    # - HybridSearchTool: uses PostgreSQL (pgvector + pg_search BM25 with RRF)
     tools: List[BaseTool] = [
-        VectorSearchTool(neo4j_client=neo4j),
+        VectorSearchTool(postgres_client=postgres),
         KeywordSearchTool(postgres_client=postgres),
         GraphTraverseTool(neo4j_client=neo4j),
         HybridSearchTool(postgres_client=postgres),
@@ -322,7 +327,7 @@ def create_initial_state(user_query: str) -> AgentState:
     return {
         "messages": [
             SystemMessage(content=SYSTEM_PROMPT),
-            ("user", user_query),
+            HumanMessage(content=user_query),
         ],
         "tool_call_count": 0,
         "model_call_count": 0,
