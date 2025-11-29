@@ -45,6 +45,7 @@ This system implements a comprehensive agentic RAG architecture that addresses t
 ## Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#0366d6','primaryTextColor':'#fff','primaryBorderColor':'#0366d6','lineColor':'#6a737d','secondaryColor':'#f6f8fa','tertiaryColor':'#fff','fontSize':'16px'}}}%%
 graph TB
     subgraph StateGraph["LangGraph StateGraph"]
         CallModel["Call<br/>Model"]
@@ -79,10 +80,6 @@ graph TB
     GraphTraverse --> Neo4j
     HybridSearch --> Neo4j
     HybridSearch --> PostgreSQL
-    
-    style StateGraph fill:#e1f5ff
-    style Tools fill:#fff4e1
-    style Storage fill:#e8f5e9
 ```
 
 ## Installation
