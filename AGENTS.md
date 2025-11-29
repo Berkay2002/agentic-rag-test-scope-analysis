@@ -8,11 +8,13 @@ This is an **Agentic GraphRAG system** for test scope analysis in telecommunicat
 - **Language**: Python 3.11+
 - **Agent Framework**: LangGraph (custom StateGraph) + LangChain
 - **LLM**: Google Generative AI (Gemini 2.0 Flash)
-- **Databases**: Neo4j (graph + vector) + PostgreSQL/Neon (pgvector + full-text search)
+- **Databases**: Neo4j (knowledge graph only) + PostgreSQL/Neon (pgvector + pg_search BM25)
 - **Observability**: LangSmith (full tracing)
 - **Package Manager**: Poetry
 
-**Architecture**: Custom ReAct agent with 4 retrieval tools (vector search, keyword search, graph traversal, hybrid search) operating on a dual-database architecture to answer test scope queries.
+**Architecture**: Custom ReAct agent with 4 retrieval tools operating on a dual-database architecture:
+- **Neo4j**: Knowledge graph for entity relationships and graph traversal
+- **PostgreSQL/Neon**: All retrieval (pgvector for semantic search, pg_search for BM25 keyword search, RRF hybrid fusion)
 
 ## Setup Commands
 
@@ -42,9 +44,9 @@ poetry run agrag init
 
 This creates:
 - Neo4j constraints for entity uniqueness
-- Neo4j vector indexes (768-dim, cosine similarity)
-- PostgreSQL pgvector extension and tables
-- PostgreSQL full-text search indexes
+- Neo4j indexes for graph traversal
+- PostgreSQL pgvector extension and HNSW vector index (768-dim, cosine similarity)
+- PostgreSQL pg_search extension and BM25 inverted index for keyword search
 
 ### Generate Synthetic Test Data
 
@@ -375,13 +377,12 @@ The agent has access to 4 retrieval tools (defined in `src/agrag/tools/`):
 - "authentication requirements"
 - "functions dealing with network timeouts"
 
-**Implementation**: Neo4j vector index (HNSW, cosine similarity, 768-dim)
+**Implementation**: PostgreSQL pgvector (HNSW index, cosine similarity, 768-dim)
 
 **Parameters**:
 - `query`: Search text
 - `k`: Number of results (default: 10)
 - `node_type`: Filter by entity type (optional)
-- `similarity_threshold`: Minimum cosine similarity (default: 0.7)
 
 ### 2. Keyword Search (`keyword_search`)
 
@@ -392,11 +393,14 @@ The agent has access to 4 retrieval tools (defined in `src/agrag/tools/`):
 - "REQ_AUTH_005"
 - "ERROR_E503"
 
-**Implementation**: PostgreSQL full-text search (ts_rank_cd ranking)
+**Implementation**: PostgreSQL pg_search extension with true BM25 ranking (ParadeDB)
+
+Uses the `@@@` operator with `paradedb.score()` for relevance scoring.
 
 **Parameters**:
 - `query`: Search keywords
 - `k`: Number of results (default: 10)
+- `entity_type`: Filter by entity type (optional)
 
 ### 3. Graph Traversal (`graph_traverse`)
 
@@ -424,12 +428,17 @@ The agent has access to 4 retrieval tools (defined in `src/agrag/tools/`):
 - "tests for LTE signaling with timeout errors"
 - "handover functions with retry logic"
 
-**Implementation**: RRF fusion of vector + keyword results
+**Implementation**: PostgreSQL-native RRF fusion combining:
+- pgvector HNSW similarity search
+- pg_search BM25 keyword search
+
+Uses Reciprocal Rank Fusion (RRF) to merge results from both retrieval methods.
 
 **Parameters**:
 - `query`: Search text
 - `k`: Number of results (default: 10)
-- `rrf_k`: RRF constant (default: 60)
+- `rrf_k`: RRF smoothing constant (default: 60)
+- `entity_type`: Filter by entity type (optional)
 
 ## Evaluation Framework
 
@@ -526,10 +535,10 @@ The system uses Pydantic Settings with environment variable priority:
 4. Run `agrag init` to create schema
 
 **PostgreSQL** (use Neon for serverless):
-1. Create database instance
-2. Ensure PostgreSQL 15+ with pgvector extension
+1. Create database instance (AWS region required for pg_search)
+2. Ensure PostgreSQL 17+ with pgvector and pg_search extensions
 3. Note connection string
-4. Run `agrag init` to create schema
+4. Run `agrag init` to create schema (pgvector HNSW + pg_search BM25 indexes)
 
 ## Human-in-the-Loop (HITL) Workflows
 
@@ -746,10 +755,17 @@ RETURN r.id, collect(t.id) as tests
 -- Count chunks
 SELECT COUNT(*) FROM document_chunks;
 
--- Sample embeddings
+-- Vector similarity search (pgvector)
 SELECT chunk_id, content, embedding <=> '[0.1, 0.2, ...]'::vector AS distance
 FROM document_chunks
 ORDER BY distance
+LIMIT 10;
+
+-- BM25 keyword search (pg_search)
+SELECT chunk_id, content, paradedb.score(id) AS bm25_score
+FROM document_chunks
+WHERE content @@@ 'handover'
+ORDER BY paradedb.score(id) DESC
 LIMIT 10;
 ```
 
@@ -779,6 +795,7 @@ LIMIT 10;
 - **LangGraph Docs**: https://langchain-ai.github.io/langgraph/
 - **Neo4j Cypher**: https://neo4j.com/docs/cypher-manual/
 - **pgvector**: https://github.com/pgvector/pgvector
+- **pg_search (ParadeDB)**: https://docs.paradedb.com/ and https://neon.com/docs/extensions/pg_search
 - **LangSmith**: https://smith.langchain.com/
 
 ## Contributing
