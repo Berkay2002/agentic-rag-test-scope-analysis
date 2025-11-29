@@ -31,16 +31,35 @@ This system implements a comprehensive agentic RAG architecture that addresses t
 
 ## Key Features
 
+### Agent & Orchestration
 - **Custom LangGraph Agent**: Full control over ReAct loop with StateGraph
-- **Dual Storage Architecture**: Neo4j (graph + vectors) + PostgreSQL (vectors + full-text search)
+- **HITL Workflows**: PostgresSaver checkpointing for human intervention
+- **LangSmith Integration**: Full observability and debugging
+
+### Storage & Retrieval
+- **Dual Storage Architecture**: Neo4j (graph + vectors) + PostgreSQL (vectors + full-text search + BM25)
 - **4 Retrieval Tools**:
   - Vector Search (semantic similarity)
-  - Keyword Search (lexical matching)
+  - Keyword Search (lexical matching via PostgreSQL FTS)
   - Graph Traversal (structural dependencies)
   - Hybrid Search (RRF fusion)
-- **LangSmith Integration**: Full observability and debugging
-- **HITL Workflows**: PostgresSaver checkpointing for human intervention
-- **Evaluation Metrics**: Precision@k, Recall@k, MAP, MRR
+- **BM25 Retriever**: In-memory keyword search with persistence
+
+### Document Loading & Processing
+- **AI-Powered Document Parsing**: Docling integration (15+ formats)
+  - DocLayNet layout analysis (IBM Research AI model)
+  - TableFormer for table structure recognition
+  - HybridChunker for semantic chunking
+- **AST-Based Code Parsing**: Tree-sitter for structure-aware code analysis
+  - Extract functions, classes, methods with full context
+  - Preserve parent-child relationships and docstrings
+  - Multi-language support (Python, Java, etc.)
+- **Dual Storage Writer**: Coordinated writes to Neo4j + PostgreSQL + BM25
+  - Retry logic with exponential backoff
+  - Idempotent upserts for reliability
+
+### Evaluation
+- **Comprehensive Metrics**: Precision@k, Recall@k, MAP, MRR, F1@k
 
 ## Architecture
 
@@ -176,6 +195,40 @@ poetry run agrag query "Find handover-related test cases" --stream
 
 # With HITL checkpointing
 poetry run agrag query "Show dependencies for TestLoginTimeout" --checkpoint --thread-id my-session
+```
+
+#### Load Documents and Code
+```bash
+# Load documents with Docling (AI-powered parsing)
+poetry run agrag load docs /path/to/requirements --use-chunker
+
+# Load with specific formats and options
+poetry run agrag load docs /path/to/docs \
+  --formats pdf,docx,xlsx \
+  --use-chunker \
+  --table-mode accurate \
+  --max-pages 100
+
+# Load code repository
+poetry run agrag load repo /path/to/repository --languages python
+
+# Load with filtering
+poetry run agrag load repo /path/to/repo \
+  --languages python,java \
+  --include "src/**/*.py" \
+  --exclude "tests/**"
+
+# Show loading statistics
+poetry run agrag load stats
+```
+
+#### Data Management
+```bash
+# Generate synthetic test data
+poetry run agrag generate --requirements 50 --testcases 200
+
+# Ingest data into databases
+poetry run agrag ingest data/synthetic_dataset.json
 ```
 
 #### Initialize Databases
@@ -343,18 +396,33 @@ metrics = evaluate_retrieval(retrieved, relevant, k_values=[1, 3, 5, 10])
 ```
 src/agrag/
 ├── cli/              # CLI application
+│   ├── main.py       # Commands: query, chat, load, init, generate, etc.
+│   └── interactive.py # Interactive chat interface
 ├── config/           # Configuration and logging
 ├── core/             # StateGraph agent
 │   ├── state.py      # AgentState definition
 │   ├── nodes.py      # Graph nodes
-│   └── graph.py      # StateGraph builder
+│   ├── graph.py      # StateGraph builder
+│   └── checkpointing.py # HITL checkpointing
 ├── data/             # Data generation and ingestion
+│   ├── generators/   # Synthetic data generation
+│   ├── loaders/      # Document and code loaders
+│   │   ├── base.py           # Abstract base classes
+│   │   ├── document_loader.py # Docling integration
+│   │   ├── code_loader.py    # Repository walker
+│   │   └── splitters/        # Text splitters
+│   │       ├── code_splitter.py     # AST-based
+│   │       ├── markdown_splitter.py # Header-based
+│   │       └── semantic_splitter.py # Embeddings-based
+│   ├── dual_storage_writer.py # Coordinated DB writes
+│   └── ingestion.py  # Data ingestion pipeline
 ├── evaluation/       # Evaluation metrics
 ├── kg/               # Knowledge graph ontology
 ├── models/           # LLM and embedding wrappers
 ├── storage/          # Database clients
 │   ├── neo4j_client.py
-│   └── postgres_client.py
+│   ├── postgres_client.py
+│   └── bm25_retriever.py
 └── tools/            # Retrieval tools
     ├── vector_search.py
     ├── keyword_search.py
@@ -373,13 +441,81 @@ poetry run pytest
 ### Code Quality
 ```bash
 # Format code
-poetry run black src/
+poetry run black src/ tests/
 
 # Lint
-poetry run ruff check src/
+poetry run ruff check src/ tests/
 
-# Type checking
+# Type checking (when enabled)
 poetry run mypy src/
+```
+
+### Working with Loaders
+
+#### Document Loading with Docling
+```python
+from agrag.data.loaders import DoclingDocumentLoader
+
+# Load PDF with AI-powered parsing
+loader = DoclingDocumentLoader(
+    file_path="requirements.pdf",
+    use_chunker=True,  # Enable semantic chunking
+    table_mode="accurate",  # Use TableFormer for tables
+)
+documents = loader.load()
+
+# Each document has rich metadata
+for doc in documents:
+    print(doc.metadata)  # headings, page_number, bbox, etc.
+```
+
+#### Code Repository Loading
+```python
+from agrag.data.loaders import CodeLoader
+
+# Load Python repository
+loader = CodeLoader(
+    repo_path="/path/to/repo",
+    languages=["python"],
+    include_patterns=["src/**/*.py"],
+)
+code_docs = loader.load()
+
+# Each document represents a function/class with AST metadata
+for doc in code_docs:
+    print(doc.metadata)  # type, name, signature, line_start, complexity, etc.
+```
+
+#### Custom Text Splitting
+```python
+from agrag.data.loaders.splitters import CodeSplitter, MarkdownSplitter
+
+# AST-based code splitting
+code_splitter = CodeSplitter(language="python")
+functions = code_splitter.split_code(source_code)
+
+# Header-based markdown splitting
+md_splitter = MarkdownSplitter(max_chunk_size=1000)
+sections = md_splitter.split_text(markdown_content)
+```
+
+### Database Management
+
+#### Dual Storage Writes
+```python
+from agrag.data.dual_storage_writer import DualStorageWriter
+
+writer = DualStorageWriter()
+
+# Write entities to Neo4j + PostgreSQL + BM25
+stats = writer.write_entities_batch(
+    entities=my_entities,
+    entity_type="Requirement",
+    batch_size=100
+)
+
+# Persist BM25 index
+writer.persist_bm25_index("data/bm25_index.pkl")
 ```
 
 ## Research Questions
