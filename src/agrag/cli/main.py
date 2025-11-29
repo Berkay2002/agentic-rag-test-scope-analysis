@@ -503,5 +503,198 @@ def ingest(dataset_path: str):
         sys.exit(1)
 
 
+@cli.group()
+def load():
+    """Load data from various sources (code repositories, documents, etc.)."""
+    pass
+
+
+@load.command("repo")
+@click.argument("repo_path")
+@click.option(
+    "--languages",
+    type=str,
+    default="python",
+    help="Comma-separated list of languages to process",
+)
+def load_repo(repo_path: str, languages: str):
+    """Load and ingest code from a repository.
+
+    Uses AST-based parsing to extract functions, classes, and modules
+    from source code files while preserving structural relationships.
+
+    Examples:
+      agrag load repo /path/to/repo
+      agrag load repo /path/to/repo --languages python,java
+    """
+    from agrag.data.ingestion import DataIngestion
+
+    click.echo("\n=== Loading Code Repository ===\n")
+    click.echo(f"Repository: {repo_path}")
+    click.echo(f"Languages: {languages}\n")
+
+    try:
+        # Verify path exists
+        repo_path_obj = Path(repo_path)
+        if not repo_path_obj.exists():
+            click.echo(f"✗ Repository path does not exist: {repo_path}", err=True)
+            sys.exit(1)
+
+        # Ingest repository
+        click.echo("Analyzing code repository (this may take a few minutes)...\n")
+        ingestion = DataIngestion()
+        results = ingestion.ingest_from_code_repository(repo_path)
+
+        # Display results
+        click.echo("\n✓ Repository ingestion complete!")
+        click.echo("\nResults:")
+        click.echo(f"  Neo4j entities: {results.get('neo4j', 0)}")
+        click.echo(f"  PostgreSQL entities: {results.get('postgres', 0)}")
+        click.echo(f"  BM25 index entries: {results.get('bm25', 0)}")
+
+        click.echo('\n\nNext step: agrag query "Find functions related to authentication"')
+
+    except Exception as e:
+        click.echo(f"\n✗ Repository loading failed: {e}", err=True)
+        logger.exception("Repository loading failed")
+        sys.exit(1)
+
+
+@load.command("docs")
+@click.argument("directory")
+@click.option(
+    "--formats",
+    type=str,
+    default="pdf,docx,markdown",
+    help="Comma-separated list of formats (pdf,docx,xlsx,pptx,markdown,html,csv,images)",
+)
+@click.option(
+    "--use-chunker/--no-chunker",
+    default=True,
+    help="Use Docling HybridChunker for semantic chunking",
+)
+@click.option(
+    "--export-format",
+    type=click.Choice(["markdown", "text", "json", "html", "doctags"]),
+    default="markdown",
+    help="Export format for documents",
+)
+@click.option(
+    "--table-mode",
+    type=click.Choice(["accurate", "fast"]),
+    default="accurate",
+    help="TableFormer mode: accurate (slower, better quality) or fast",
+)
+@click.option(
+    "--max-pages",
+    type=int,
+    default=None,
+    help="Maximum pages to process per document",
+)
+def load_docs(
+    directory: str,
+    formats: str,
+    use_chunker: bool,
+    export_format: str,
+    table_mode: str,
+    max_pages: Optional[int],
+):
+    """Load and ingest documentation/requirements using Docling.
+
+    Docling provides production-grade parsing for PDF, DOCX, XLSX, PPTX,
+    Markdown, HTML, CSV, images, and more. It uses AI models (DocLayNet,
+    TableFormer) for accurate layout analysis and table extraction.
+
+    Examples:
+      agrag load docs /path/to/docs
+      agrag load docs /path/to/docs --formats pdf,docx --use-chunker
+      agrag load docs /path/to/docs --table-mode fast --max-pages 50
+    """
+    from agrag.data.ingestion import DataIngestion
+
+    click.echo("\n=== Loading Documentation with Docling ===\n")
+    click.echo(f"Directory: {directory}")
+    click.echo(f"Formats: {formats}")
+    click.echo(f"Chunker: {'Enabled (HybridChunker)' if use_chunker else 'Disabled'}")
+    click.echo(f"Export format: {export_format}")
+    click.echo(f"Table mode: {table_mode}")
+    if max_pages:
+        click.echo(f"Max pages: {max_pages}")
+    click.echo()
+
+    try:
+        # Verify path exists
+        dir_path = Path(directory)
+        if not dir_path.exists():
+            click.echo(f"✗ Directory does not exist: {directory}", err=True)
+            sys.exit(1)
+
+        # Ingest documents
+        click.echo("Processing documents with Docling AI models...\n")
+        click.echo(
+            "Note: First run may download models (~500MB). Subsequent runs use cached models.\n"
+        )
+
+        ingestion = DataIngestion()
+        results = ingestion.ingest_from_documents(
+            directory,
+            use_chunker=use_chunker,
+            export_format=export_format,
+            table_mode=table_mode,
+            max_num_pages=max_pages,
+        )
+
+        # Display results
+        click.echo("\n✓ Documentation ingestion complete!")
+        click.echo("\nResults:")
+        click.echo(f"  Neo4j entities: {results.get('neo4j', 0)}")
+        click.echo(f"  PostgreSQL entities: {results.get('postgres', 0)}")
+        click.echo(f"  BM25 index entries: {results.get('bm25', 0)}")
+
+        click.echo('\n\nNext step: agrag query "What requirements cover authentication?"')
+
+    except Exception as e:
+        click.echo(f"\n✗ Documentation loading failed: {e}", err=True)
+        logger.exception("Documentation loading failed")
+        sys.exit(1)
+
+
+@load.command("stats")
+def load_stats():
+    """Show statistics about loaded data."""
+    from agrag.storage import Neo4jClient
+
+    click.echo("\n=== Data Statistics ===\n")
+
+    try:
+        neo4j_client = Neo4jClient()
+
+        # Count entities by type
+        query = """
+        MATCH (n)
+        RETURN labels(n)[0] AS type, count(*) AS count
+        ORDER BY count DESC
+        """
+
+        results = neo4j_client.execute_cypher(query)
+
+        if results:
+            click.echo("Entity Counts:")
+            for row in results:
+                entity_type = row.get("type", "Unknown")
+                count = row.get("count", 0)
+                click.echo(f"  {entity_type}: {count}")
+        else:
+            click.echo("No data found in the database.")
+            click.echo("\nLoad some data first:")
+            click.echo("  agrag load repo /path/to/repo")
+            click.echo("  agrag load docs /path/to/docs")
+
+    except Exception as e:
+        click.echo(f"\n✗ Failed to retrieve stats: {e}", err=True)
+        logger.exception("Stats retrieval failed")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
