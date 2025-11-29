@@ -1,11 +1,14 @@
-"""Data ingestion pipeline for loading synthetic data into Neo4j and PostgreSQL."""
+"""Data ingestion pipeline for loading data into Neo4j and PostgreSQL."""
 
 from typing import List, Dict, Any
+from pathlib import Path
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import logging
 
 from agrag.storage.neo4j_client import Neo4jClient
 from agrag.storage.postgres_client import PostgresClient
+from agrag.data.dual_storage_writer import DualStorageWriter
+from agrag.models.embeddings import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -288,3 +291,221 @@ class DataIngestion:
         logger.info(f"PostgreSQL: {results['postgres_entities']} entities with embeddings")
 
         return results
+
+    def ingest_from_code_repository(self, repo_path: str) -> Dict[str, int]:
+        """
+        Load and ingest code from a Git repository.
+
+        Args:
+            repo_path: Path to the code repository
+
+        Returns:
+            Dictionary with ingestion counts
+        """
+        from agrag.data.loaders import CodeLoader
+
+        logger.info(f"Loading code from repository: {repo_path}")
+
+        # Load code files
+        loader = CodeLoader(repo_path, languages=["python"])
+        documents = loader.load()
+
+        logger.info(f"Loaded {len(documents)} code chunks from repository")
+
+        # Convert documents to entities
+        entities = self._documents_to_entities(documents)
+
+        # Use dual storage writer
+        writer = DualStorageWriter()
+
+        # Group entities by type
+        entities_by_type = {}
+        for entity in entities:
+            entity_type = entity.get("entity_type", "Function")
+            if entity_type not in entities_by_type:
+                entities_by_type[entity_type] = []
+            entities_by_type[entity_type].append(entity)
+
+        # Ingest each type
+        total_counts = {"neo4j": 0, "postgres": 0, "bm25": 0}
+        for entity_type, type_entities in entities_by_type.items():
+            counts = writer.write_entities_batch(type_entities, entity_type)
+            for key in total_counts:
+                total_counts[key] += counts[key]
+
+        # Persist BM25 index
+        writer.persist_bm25_index()
+
+        logger.info(f"Repository ingestion complete: {total_counts}")
+        return total_counts
+
+    def ingest_from_documents(
+        self,
+        directory: str,
+        use_chunker: bool = True,
+        export_format: str = "markdown",
+        table_mode: str = "accurate",
+        max_num_pages: Optional[int] = None,
+    ) -> Dict[str, int]:
+        """
+        Load and ingest requirements/documentation using Docling.
+
+        Args:
+            directory: Path to the directory containing documents
+            use_chunker: Use Docling HybridChunker for semantic chunking
+            export_format: Export format (markdown, text, json, html, doctags)
+            table_mode: TableFormer mode (accurate or fast)
+            max_num_pages: Maximum pages to process per document
+
+        Returns:
+            Dictionary with ingestion counts
+        """
+        from agrag.data.loaders import MultiDocumentLoader
+
+        logger.info(f"Loading documents from: {directory} (Docling-powered)")
+
+        # Load documents with Docling
+        loader = MultiDocumentLoader(
+            directory,
+            use_chunker=use_chunker,
+            export_format=export_format,
+            table_mode=table_mode,
+            max_num_pages=max_num_pages,
+        )
+        documents = loader.load()
+
+        logger.info(f"Loaded {len(documents)} document chunks")
+
+        # Convert documents to requirement entities
+        entities = self._documents_to_requirements(documents)
+
+        # Use dual storage writer
+        writer = DualStorageWriter()
+        counts = writer.write_entities_batch(entities, "Requirement")
+
+        # Persist BM25 index
+        writer.persist_bm25_index()
+
+        logger.info(f"Document ingestion complete: {counts}")
+        return counts
+
+    def _documents_to_entities(self, documents: List[Any]) -> List[Dict[str, Any]]:
+        """
+        Convert Document objects to entity dictionaries.
+
+        Args:
+            documents: List of Document objects from loaders
+
+        Returns:
+            List of entity dictionaries
+        """
+        entities = []
+        embedding_service = get_embedding_service()
+
+        for doc in documents:
+            metadata = doc.metadata
+            entity_type = metadata.get("type", "function")
+
+            # Generate embedding if not present
+            embedding = metadata.get("embedding")
+            if not embedding:
+                embedding = embedding_service.embed_query(doc.page_content)
+
+            # Build entity based on type
+            if entity_type == "function" or entity_type == "method":
+                entity = {
+                    "id": f"FUNC_{metadata.get('name', 'unknown')}",
+                    "name": metadata.get("name", "unknown"),
+                    "signature": metadata.get("signature", ""),
+                    "code_snippet": doc.page_content[:500],  # Truncate for storage
+                    "file_path": metadata.get("file_path", ""),
+                    "line_number": metadata.get("line_start", 0),
+                    "docstring": metadata.get("docstring", ""),
+                    "complexity": metadata.get("complexity", 0),
+                    "embedding": embedding,
+                    "metadata": {
+                        "parent_class": metadata.get("parent_class"),
+                        "decorators": metadata.get("decorators", []),
+                        "language": metadata.get("language", "python"),
+                    },
+                    "entity_type": "Function",
+                }
+            elif entity_type == "class":
+                entity = {
+                    "id": f"CLASS_{metadata.get('name', 'unknown')}",
+                    "name": metadata.get("name", "unknown"),
+                    "file_path": metadata.get("file_path", ""),
+                    "line_number": metadata.get("line_start", 0),
+                    "methods": metadata.get("methods", []),
+                    "base_classes": metadata.get("base_classes", []),
+                    "docstring": metadata.get("docstring", ""),
+                    "embedding": embedding,
+                    "metadata": {
+                        "language": metadata.get("language", "python"),
+                    },
+                    "entity_type": "Class",
+                }
+            else:
+                # Default entity
+                entity = {
+                    "id": f"{entity_type.upper()}_{hash(doc.page_content) % 10000:04d}",
+                    "name": metadata.get("name", ""),
+                    "description": doc.page_content[:200],
+                    "file_path": metadata.get("file_path", ""),
+                    "embedding": embedding,
+                    "metadata": metadata,
+                    "entity_type": entity_type.title(),
+                }
+
+            entities.append(entity)
+
+        return entities
+
+    def _documents_to_requirements(self, documents: List[Any]) -> List[Dict[str, Any]]:
+        """
+        Convert Document objects to Requirement entities.
+
+        Args:
+            documents: List of Document objects
+
+        Returns:
+            List of requirement entity dictionaries
+        """
+        requirements = []
+        embedding_service = get_embedding_service()
+
+        for doc in documents:
+            metadata = doc.metadata
+
+            # Generate embedding
+            embedding = embedding_service.embed_query(doc.page_content)
+
+            # Extract requirement ID from section or generate one
+            req_id = metadata.get("section", f"REQ_{hash(doc.page_content) % 10000:04d}")
+            if not req_id.startswith("REQ_"):
+                req_id = f"REQ_{req_id}"
+
+            requirement = {
+                "id": req_id,
+                "description": doc.page_content,
+                "priority": "MEDIUM",  # Default priority
+                "status": "APPROVED",
+                "category": (
+                    metadata.get("parent_sections", ["general"])[0]
+                    if metadata.get("parent_sections")
+                    else "general"
+                ),
+                "embedding": embedding,
+                "metadata": {
+                    "title": metadata.get("title", ""),
+                    "section": metadata.get("section", ""),
+                    "parent_sections": metadata.get("parent_sections", []),
+                    "file_path": metadata.get("file_path", ""),
+                    "line_start": metadata.get("line_start", 0),
+                    "line_end": metadata.get("line_end", 0),
+                },
+            }
+
+            requirements.append(requirement)
+
+        return requirements
