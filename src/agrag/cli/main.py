@@ -286,8 +286,7 @@ def evaluate(dataset: str, output: str, k_values: str):
 
             click.echo(f"[{i}/{len(queries)}] {query[:60]}...")
 
-            # TODO: Implement retrieval execution
-            # For now, placeholder
+            # Note: Retrieval execution placeholder for evaluation framework
             retrieved = []  # Would run actual retrieval here
 
             metrics = evaluate_retrieval(retrieved, relevant, k_values=k_list)

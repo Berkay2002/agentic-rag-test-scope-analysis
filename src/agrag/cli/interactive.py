@@ -292,7 +292,7 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
             self._print_welcome()
 
         elif command == "/history":
-            # TODO: Implement history viewing from checkpointer
+            # History viewing from checkpointer not yet implemented
             self.console.print("[yellow]History viewing not yet implemented[/yellow]")
 
         elif command == "/stats":
@@ -316,7 +316,7 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
                     f.write(f"Session ID: {self.thread_id}\n")
                     f.write(f"Date: {datetime.now().isoformat()}\n")
                     f.write("=" * 80 + "\n\n")
-                    # TODO: Save actual conversation from checkpointer
+                    # Note: Full conversation history retrieval not yet implemented
                     f.write("(Conversation history retrieval not yet implemented)\n")
                 self.console.print(f"[green]✓ Conversation saved to {filename}[/green]")
             except Exception as e:
