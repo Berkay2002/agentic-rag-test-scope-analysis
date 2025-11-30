@@ -180,44 +180,84 @@ def query(
                 if thread_id:
                     click.echo("[Thread] thread_id ignored because no checkpointer is active.")
 
-        # Create graph
-        graph = create_agent_graph(checkpointer=checkpointer)
+        # Create graph (disable HITL for non-interactive query command)
+        graph = create_agent_graph(checkpointer=checkpointer, enable_hitl=False)
 
-        # Create initial state
+        # Create initial state (new format for create_agent API)
         initial_state = create_initial_state(query_text)
 
         # Variables for stats
         tool_call_count = 0
         model_call_count = 0
+        final_answer = "No answer generated"
 
         # Run graph
         if stream:
             click.echo("--- Agent Execution ---\n")
-            for event in graph.stream(initial_state, config=config):
-                # Log each step
-                for node_name, node_state in event.items():
-                    click.echo(f"[{node_name}]")
-
-                    if "messages" in node_state:
-                        messages = node_state["messages"]
-                        for msg in messages:
-                            msg_type = msg.__class__.__name__
-                            content_preview = str(msg.content)[:100]
-                            click.echo(f"  {msg_type}: {content_preview}...")
-
-            # Get final result - get_state returns StateSnapshot with .values attribute
-            state_snapshot = graph.get_state(config)
-            state_values = state_snapshot.values
-            final_answer = state_values.get("final_answer", "No answer generated")
-            tool_call_count = state_values.get("tool_call_count", 0)
-            model_call_count = state_values.get("model_call_count", 0)
+            for event in graph.stream(initial_state, config=config, stream_mode="values"):
+                # Extract messages from the event
+                messages = event.get("messages", [])
+                if messages:
+                    last_message = messages[-1]
+                    msg_type = last_message.__class__.__name__
+                    
+                    # Check for tool calls
+                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                        tool_call_count += len(last_message.tool_calls)
+                        tool_names = [tc.get("name", "unknown") for tc in last_message.tool_calls]
+                        click.echo(f"[tools] Executing: {', '.join(tool_names)}")
+                    
+                    # Check for AI response
+                    elif hasattr(last_message, "content") and last_message.content:
+                        if hasattr(last_message, "type") and last_message.type == "ai":
+                            model_call_count += 1
+                            content = last_message.content
+                            if isinstance(content, str):
+                                final_answer = content
+                                content_preview = content[:100]
+                            elif isinstance(content, list):
+                                text_parts = []
+                                for part in content:
+                                    if isinstance(part, dict) and "text" in part:
+                                        text_parts.append(part["text"])
+                                    elif isinstance(part, str):
+                                        text_parts.append(part)
+                                final_answer = "\n".join(text_parts)
+                                content_preview = final_answer[:100]
+                            else:
+                                content_preview = str(content)[:100]
+                            click.echo(f"[{msg_type}] {content_preview}...")
+                        elif hasattr(last_message, "type") and last_message.type == "tool":
+                            content_preview = str(last_message.content)[:100]
+                            click.echo(f"[ToolMessage] {content_preview}...")
 
         else:
             # Non-streaming execution - invoke returns the state dict directly
             final_state = graph.invoke(initial_state, config=config)
-            final_answer = final_state.get("final_answer", "No answer generated")
-            tool_call_count = final_state.get("tool_call_count", 0)
-            model_call_count = final_state.get("model_call_count", 0)
+            messages = final_state.get("messages", [])
+            
+            # Find the last AI message as the answer
+            for msg in reversed(messages):
+                if hasattr(msg, "type") and msg.type == "ai":
+                    if hasattr(msg, "content") and msg.content:
+                        if isinstance(msg.content, str):
+                            final_answer = msg.content
+                        elif isinstance(msg.content, list):
+                            text_parts = []
+                            for part in msg.content:
+                                if isinstance(part, dict) and "text" in part:
+                                    text_parts.append(part["text"])
+                                elif isinstance(part, str):
+                                    text_parts.append(part)
+                            final_answer = "\n".join(text_parts)
+                        break
+                    
+            # Count tool calls and model calls from messages
+            for msg in messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    tool_call_count += len(msg.tool_calls)
+                if hasattr(msg, "type") and msg.type == "ai":
+                    model_call_count += 1
 
         # Display final answer
         click.echo("\n--- Final Answer ---\n")
@@ -365,13 +405,12 @@ def evaluate(
         # Initialize retrieval tools
         tools = {}
         if strategy in ["vector", "all"]:
-            tools["vector"] = VectorSearchTool(neo4j_client=neo4j_client)
+            tools["vector"] = VectorSearchTool(postgres_client=postgres_client)
         if strategy in ["keyword", "all"]:
-            tools["keyword"] = KeywordSearchTool(bm25_manager=bm25_manager)
+            tools["keyword"] = KeywordSearchTool(postgres_client=postgres_client)
         if strategy in ["hybrid", "all"]:
             tools["hybrid"] = HybridSearchTool(
                 postgres_client=postgres_client,
-                bm25_manager=bm25_manager,
             )
         if strategy in ["graph", "all"]:
             tools["graph"] = GraphTraverseTool(neo4j_client=neo4j_client)
