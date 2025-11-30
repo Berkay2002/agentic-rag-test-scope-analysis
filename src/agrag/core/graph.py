@@ -1,24 +1,27 @@
-"""StateGraph definition for agentic RAG system."""
+"""Agent definition using LangChain's create_agent API."""
 
 import logging
-from typing import List, Literal, Optional
-from functools import partial
+from typing import List, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain.agents import create_agent, AgentState as LangChainAgentState
+from langchain.agents.middleware import (
+    HumanInTheLoopMiddleware,
+    ModelCallLimitMiddleware,
+    ToolCallLimitMiddleware,
+)
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
-from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from agrag.core.state import AgentState
-from agrag.core.nodes import call_model, execute_tools, finalize_answer
 from agrag.tools import (
-    VectorSearchTool,
-    KeywordSearchTool,
-    GraphTraverseTool,
-    HybridSearchTool,
+    create_vector_search_tool,
+    create_keyword_search_tool,
+    create_graph_traverse_tool,
+    create_hybrid_search_tool,
 )
 from agrag.storage import Neo4jClient, PostgresClient
+from agrag.models import get_llm
 from agrag.config import settings
 
 logger = logging.getLogger(__name__)
@@ -172,164 +175,109 @@ This is a telecommunications testing system focusing on:
 **Remember:** Your goal is helpful accuracy, not exhaustive completeness. Answer with what you find efficiently."""
 
 
-def route_after_model(
-    state: AgentState,
-) -> Literal["execute_tools", "finalize"]:
-    """
-    Route after model call based on whether tools were called.
-
-    Args:
-        state: Current agent state
-
-    Returns:
-        Next node name
-    """
-    last_message = state["messages"][-1]
-
-    # Check if model wants to use tools
-    if isinstance(last_message, AIMessage) and last_message.tool_calls:
-        logger.info("Routing to execute_tools")
-        return "execute_tools"
-
-    # No tools needed, finalize answer
-    logger.info("Routing to finalize")
-    return "finalize"
-
-
-def route_after_tools(
-    state: AgentState,
-) -> Literal["call_model", "finalize", "__end__"]:
-    """
-    Route after tool execution based on safety limits.
-
-    Args:
-        state: Current agent state
-
-    Returns:
-        Next node name or END
-    """
-    tool_count = state.get("tool_call_count", 0)
-    model_count = state.get("model_call_count", 0)
-
-    # Check safety limits
-    if tool_count >= settings.max_tool_calls:
-        logger.warning(f"Tool call limit reached ({tool_count}), finalizing")
-        return "finalize"
-
-    if model_count >= settings.max_model_calls:
-        logger.warning(f"Model call limit reached ({model_count}), finalizing")
-        return "finalize"
-
-    # Continue the loop
-    logger.info(
-        f"Continuing loop (tools: {tool_count}/{settings.max_tool_calls}, "
-        f"models: {model_count}/{settings.max_model_calls})"
-    )
-    return "call_model"
-
-
 def create_agent_graph(
     checkpointer: Optional[PostgresSaver] = None,
     neo4j_client: Optional[Neo4jClient] = None,
     postgres_client: Optional[PostgresClient] = None,
+    enable_hitl: bool = True,
+    middleware: Optional[List] = None,
 ) -> CompiledStateGraph:
     """
-    Create the StateGraph for the agentic RAG system.
+    Create the agent using LangChain's create_agent API.
 
     Args:
         checkpointer: Optional PostgresSaver for persistence (HITL)
         neo4j_client: Optional Neo4j client (creates new if not provided)
         postgres_client: Optional Postgres client (creates new if not provided)
+        enable_hitl: Whether to enable human-in-the-loop approval for tools
+        middleware: Optional list of additional middleware to apply
 
     Returns:
-        Compiled StateGraph
+        Compiled agent graph
     """
-    logger.info("Creating agent graph...")
+    logger.info("Creating agent with create_agent API...")
 
     # Initialize clients
     neo4j = neo4j_client or Neo4jClient()
     postgres = postgres_client or PostgresClient()
 
-    # Initialize tools
-    # - VectorSearchTool: uses PostgreSQL pgvector HNSW index
-    # - KeywordSearchTool: uses PostgreSQL pg_search BM25 index
-    # - GraphTraverseTool: uses Neo4j graph traversal (relationships only)
-    # - HybridSearchTool: uses PostgreSQL (pgvector + pg_search BM25 with RRF)
+    # Initialize tools using factory functions (modern @tool decorator pattern)
+    # - create_vector_search_tool: uses PostgreSQL pgvector HNSW index
+    # - create_keyword_search_tool: uses PostgreSQL pg_search BM25 index
+    # - create_graph_traverse_tool: uses Neo4j graph traversal (relationships only)
+    # - create_hybrid_search_tool: uses PostgreSQL (pgvector + pg_search BM25 with RRF)
     tools: List[BaseTool] = [
-        VectorSearchTool(postgres_client=postgres),
-        KeywordSearchTool(postgres_client=postgres),
-        GraphTraverseTool(neo4j_client=neo4j),
-        HybridSearchTool(postgres_client=postgres),
+        create_vector_search_tool(postgres_client=postgres),
+        create_keyword_search_tool(postgres_client=postgres),
+        create_graph_traverse_tool(neo4j_client=neo4j),
+        create_hybrid_search_tool(postgres_client=postgres),
     ]
 
     logger.info(f"Initialized {len(tools)} tools: {[t.name for t in tools]}")
 
-    # Create graph
-    graph = StateGraph(AgentState)
+    # Get LLM instance
+    llm = get_llm()
 
-    # Add nodes (wrap with partial to pass tools)
-    graph.add_node("call_model", partial(call_model, tools=tools))
-    graph.add_node("execute_tools", partial(execute_tools, tools=tools))
-    graph.add_node("finalize", finalize_answer)
+    # Build middleware list
+    agent_middleware = middleware or []
 
-    # Set entry point
-    graph.set_entry_point("call_model")
-
-    # Add conditional edges
-    graph.add_conditional_edges(
-        "call_model",
-        route_after_model,
-        {
-            "execute_tools": "execute_tools",
-            "finalize": "finalize",
-        },
-    )
-
-    graph.add_conditional_edges(
-        "execute_tools",
-        route_after_tools,
-        {
-            "call_model": "call_model",
-            "finalize": "finalize",
-            END: END,
-        },
-    )
-
-    # Finalize node always ends
-    graph.add_edge("finalize", END)
-
-    # Compile graph with optional checkpointer
-    if checkpointer:
-        logger.info("Compiling graph with PostgresSaver checkpointer (HITL enabled)")
-        compiled = graph.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["execute_tools"],  # HITL: pause before tool execution
+    # Add HITL middleware if enabled and checkpointer is available
+    if enable_hitl and checkpointer:
+        logger.info("Adding HumanInTheLoopMiddleware for tool approval")
+        agent_middleware.append(
+            HumanInTheLoopMiddleware(
+                interrupt_on={
+                    "vector_search": True,  # All decisions allowed (approve, edit, reject)
+                    "keyword_search": True,
+                    "graph_traverse": True,
+                    "hybrid_search": True,
+                },
+                description_prefix="Tool execution requires approval",
+            )
         )
-    else:
-        logger.info("Compiling graph without checkpointer")
-        compiled = graph.compile()
 
-    logger.info("Agent graph created successfully")
+    # Add limit middleware to prevent runaway execution
+    agent_middleware.extend([
+        ModelCallLimitMiddleware(
+            run_limit=settings.max_model_calls,
+            exit_behavior="end",
+        ),
+        ToolCallLimitMiddleware(
+            run_limit=settings.max_tool_calls,
+            exit_behavior="continue",
+        ),
+    ])
 
-    return compiled
+    logger.info(f"Configured {len(agent_middleware)} middleware components")
+
+    # Create agent using the new API
+    agent = create_agent(
+        model=llm,
+        tools=tools,
+        system_prompt=SYSTEM_PROMPT,
+        middleware=agent_middleware,
+        checkpointer=checkpointer,
+    )
+
+    logger.info("Agent created successfully with create_agent API")
+
+    return agent
 
 
-def create_initial_state(user_query: str) -> AgentState:
+def create_initial_state(user_query: str) -> dict:
     """
     Create initial state for a new conversation.
+
+    The create_agent API uses a simpler state format with just messages.
 
     Args:
         user_query: User's query
 
     Returns:
-        Initial AgentState
+        Initial state dict with messages
     """
     return {
         "messages": [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=user_query),
+            {"role": "user", "content": user_query},
         ],
-        "tool_call_count": 0,
-        "model_call_count": 0,
-        "final_answer": "",
     }
