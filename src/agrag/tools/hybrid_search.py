@@ -118,10 +118,14 @@ def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
             # Format results
             search_results = []
             for result in results:
+                # Handle None rrf_score value - use 0.0 as fallback
+                rrf_score = result.get("rrf_score")
+                score = float(rrf_score) if rrf_score is not None else 0.0
+
                 search_result = SearchResult(
                     id=result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
-                    score=float(result.get("rrf_score", 0.0)),
+                    score=score,
                     metadata=result.get("metadata", {}),
                     source="hybrid",
                 )

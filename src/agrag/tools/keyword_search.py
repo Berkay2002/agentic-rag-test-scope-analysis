@@ -102,10 +102,14 @@ def create_keyword_search_tool(postgres_client: Optional[PostgresClient] = None)
             # Format results
             search_results = []
             for result in results:
+                # Handle None score from paradedb.score() - use 0.0 as fallback
+                rank = result.get("rank")
+                score = float(rank) if rank is not None else 0.0
+
                 search_result = SearchResult(
                     id=result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
-                    score=float(result.get("rank", 0.0)),
+                    score=score,
                     metadata=result.get("metadata", {}),
                     source="postgres_fts",
                 )

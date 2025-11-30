@@ -32,18 +32,19 @@ This system implements a comprehensive agentic RAG architecture that addresses t
 ## Key Features
 
 ### Agent & Orchestration
-- **Custom LangGraph Agent**: Full control over ReAct loop with StateGraph
-- **HITL Workflows**: PostgresSaver checkpointing for human intervention
+- **LangChain create_agent API**: Modern high-level agent API with built-in middleware support
+- **HITL Workflows**: PostgresSaver checkpointing for human intervention and tool approval
+- **Middleware Support**: Built-in ModelCallLimit, ToolCallLimit, HumanInTheLoop, and PII detection middleware
 - **LangSmith Integration**: Full observability and debugging
+- **Gemini Thinking Configuration**: Adjustable reasoning depth (low/medium/high/dynamic) via CLI commands
 
 ### Storage & Retrieval
-- **Dual Storage Architecture**: Neo4j (graph + vectors) + PostgreSQL (vectors + full-text search + BM25)
-- **4 Retrieval Tools**:
-  - Vector Search (semantic similarity)
-  - Keyword Search (lexical matching via PostgreSQL FTS)
-  - Graph Traversal (structural dependencies)
-  - Hybrid Search (RRF fusion)
-- **BM25 Retriever**: In-memory keyword search with persistence
+- **Dual Storage Architecture**: Neo4j (knowledge graph) + PostgreSQL (pgvector + pg_search BM25)
+- **4 Retrieval Tools** (using @tool decorator pattern with factory functions):
+  - Vector Search (pgvector semantic similarity)
+  - Keyword Search (pg_search BM25 lexical matching)
+  - Graph Traversal (Neo4j Cypher queries)
+  - Hybrid Search (RRF fusion of vector + keyword)
 
 ### Document Loading & Processing
 - **AI-Powered Document Parsing**: Docling integration (15+ formats)
@@ -54,29 +55,37 @@ This system implements a comprehensive agentic RAG architecture that addresses t
   - Extract functions, classes, methods with full context
   - Preserve parent-child relationships and docstrings
   - Multi-language support (Python, Java, etc.)
+- **TGF (Test Governance Framework) Loader**: CSV loader for Ericsson test execution results
+  - Parses TGF CSV format with test metadata
+  - Maps to TestCase entities with relationships
+  - Validates and normalizes test results and types
 - **Dual Storage Writer**: Coordinated writes to Neo4j + PostgreSQL + BM25
   - Retry logic with exponential backoff
   - Idempotent upserts for reliability
 
 ### Evaluation
 - **Comprehensive Metrics**: Precision@k, Recall@k, MAP, MRR, F1@k
+- **Agentic Evaluation Framework**: Full agent pipeline testing with dynamic strategy comparison
+- **Multi-Strategy Comparison**: Evaluate vector, keyword, hybrid, graph, and agent strategies
+- **Entity Extraction**: Automatic extraction of entity IDs from agent responses
+- **Tool Usage Tracking**: Monitor tool selection patterns and execution statistics
 
 ## Architecture
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#0366d6','primaryTextColor':'#fff','primaryBorderColor':'#0366d6','lineColor':'#6a737d','secondaryColor':'#f6f8fa','tertiaryColor':'#fff','fontSize':'16px'}}}%%
 graph TB
-    subgraph StateGraph["LangGraph StateGraph"]
-        CallModel["Call<br/>Model"]
-        ExecuteTools["Execute<br/>Tools"]
-        FinalizeAnswer["Finalize<br/>Answer"]
+    subgraph Agent["LangChain create_agent API"]
+        Middleware["Middleware<br/>(HITL, PII, Limits)"]
+        ReActLoop["ReAct<br/>Loop"]
+        ToolExecution["Tool<br/>Execution"]
         
-        CallModel --> ExecuteTools
-        ExecuteTools --> FinalizeAnswer
-        FinalizeAnswer -.-> CallModel
+        Middleware --> ReActLoop
+        ReActLoop --> ToolExecution
+        ToolExecution -.-> ReActLoop
     end
     
-    subgraph Tools["Retrieval Tools"]
+    subgraph Tools["Retrieval Tools (@tool)"]
         VectorSearch["Vector<br/>Search"]
         KeywordSearch["Keyword<br/>Search"]
         GraphTraverse["Graph<br/>Traverse"]
@@ -84,20 +93,18 @@ graph TB
     end
     
     subgraph Storage["Storage Layer"]
-        Neo4j["Neo4j<br/>(Graph + Vector)"]
-        PostgreSQL["PostgreSQL<br/>(pgvector + FTS)"]
+        Neo4j["Neo4j<br/>(Knowledge Graph)"]
+        PostgreSQL["PostgreSQL<br/>(pgvector + pg_search)"]
     end
     
-    ExecuteTools --> VectorSearch
-    ExecuteTools --> KeywordSearch
-    ExecuteTools --> GraphTraverse
-    ExecuteTools --> HybridSearch
+    ToolExecution --> VectorSearch
+    ToolExecution --> KeywordSearch
+    ToolExecution --> GraphTraverse
+    ToolExecution --> HybridSearch
     
-    VectorSearch --> Neo4j
     VectorSearch --> PostgreSQL
     KeywordSearch --> PostgreSQL
     GraphTraverse --> Neo4j
-    HybridSearch --> Neo4j
     HybridSearch --> PostgreSQL
 ```
 
@@ -106,8 +113,8 @@ graph TB
 ### Prerequisites
 
 - Python 3.11+
-- Neo4j 5.20+ (with APOC and GDS plugins)
-- PostgreSQL 15+ with pgvector extension
+- Neo4j 5.20+ (with APOC plugin for graph operations)
+- PostgreSQL 15+ with pgvector and pg_search extensions
 - Poetry 1.8+
 
 ### Setup
@@ -183,6 +190,7 @@ The interactive chat mode provides a conversational interface with:
 - `/stats` - Show session statistics (messages, tool calls, duration)
 - `/reset` - Start new conversation
 - `/save` - Save conversation to file
+- `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
 - `/exit` or `/quit` - Exit chat
 
 #### Query the System
@@ -227,6 +235,12 @@ poetry run agrag load stats
 # Generate synthetic test data
 poetry run agrag generate --requirements 50 --testcases 200
 
+# Generate with evaluation dataset
+poetry run agrag generate --requirements 50 --testcases 200 --with-eval
+
+# Generate and immediately ingest (resets databases first)
+poetry run agrag generate --requirements 50 --testcases 200 --ingest
+
 # Ingest data into databases
 poetry run agrag ingest data/synthetic_dataset.json
 ```
@@ -238,7 +252,17 @@ poetry run agrag init
 
 #### Run Evaluation
 ```bash
+# Evaluate all strategies on a dataset
 poetry run agrag evaluate --dataset data/eval_queries.json --output results.json
+
+# Evaluate specific strategy
+poetry run agrag evaluate --dataset data/eval_queries.json --strategy vector
+
+# Evaluate the full agent with dynamic tool selection (RQ2)
+poetry run agrag evaluate --dataset data/eval_queries.json --strategy agent
+
+# Evaluate with verbose per-query metrics
+poetry run agrag evaluate --dataset data/eval_queries.json --strategy all --verbose
 ```
 
 #### Show Configuration
@@ -250,10 +274,19 @@ poetry run agrag info
 
 ```python
 from agrag.core import create_agent_graph, create_initial_state
-from agrag.storage import Neo4jClient, PostgresClient
 
-# Create agent
+# Create agent with default settings
 graph = create_agent_graph()
+
+# Create agent with middleware configuration
+from agrag.middleware import get_pii_middleware
+
+graph = create_agent_graph(
+    middleware=get_pii_middleware(),  # Optional PII protection
+    max_model_calls=10,               # Limit model invocations
+    max_tool_calls=20,                # Limit tool executions
+    enable_hitl=True,                 # Enable human-in-the-loop
+)
 
 # Run query
 initial_state = create_initial_state("Find tests for handover failures")
@@ -284,7 +317,7 @@ The system uses a custom ontology for software engineering entities:
 ## Retrieval Tools
 
 ### 1. Vector Search
-Semantic search using Neo4j vector indexes (768-dim embeddings).
+Semantic search using PostgreSQL pgvector (HNSW index, 768-dim embeddings, cosine similarity).
 
 **Best for:**
 - Conceptual queries
@@ -293,9 +326,12 @@ Semantic search using Neo4j vector indexes (768-dim embeddings).
 
 **Example:**
 ```python
-from agrag.tools import VectorSearchTool
+from agrag.tools import create_vector_search_tool
+from agrag.storage import PostgresClient
 
-tool = VectorSearchTool()
+postgres_client = PostgresClient()
+
+tool = create_vector_search_tool(postgres_client)
 result = tool.invoke({
     "query": "tests related to handover failures",
     "k": 10,
@@ -304,7 +340,7 @@ result = tool.invoke({
 ```
 
 ### 2. Keyword Search
-Lexical search using BM25 (Best Matching 25) probabilistic ranking algorithm.
+Lexical search using BM25 (Best Matching 25) probabilistic ranking algorithm via PostgreSQL FTS.
 
 **Best for:**
 - Exact keyword matches
@@ -313,9 +349,13 @@ Lexical search using BM25 (Best Matching 25) probabilistic ranking algorithm.
 
 **Example:**
 ```python
-from agrag.tools import KeywordSearchTool
+from agrag.tools import create_keyword_search_tool
+from agrag.storage import PostgresClient, BM25RetrieverManager
 
-tool = KeywordSearchTool()
+postgres_client = PostgresClient()
+bm25_manager = BM25RetrieverManager()
+
+tool = create_keyword_search_tool(postgres_client, bm25_manager)
 result = tool.invoke({
     "query": "TestLoginTimeout",
     "k": 10
@@ -332,10 +372,13 @@ Multi-hop graph traversal for structural relationships.
 
 **Example:**
 ```python
-from agrag.tools import GraphTraverseTool
+from agrag.tools import create_graph_traverse_tool
+from agrag.storage import Neo4jClient
 from agrag.kg.ontology import NodeLabel, RelationshipType
 
-tool = GraphTraverseTool()
+neo4j_client = Neo4jClient()
+tool = create_graph_traverse_tool(neo4j_client)
+
 result = tool.invoke({
     "start_node_id": "REQ_AUTH_005",
     "start_node_label": NodeLabel.REQUIREMENT,
@@ -353,9 +396,12 @@ RRF fusion of vector + keyword search.
 
 **Example:**
 ```python
-from agrag.tools import HybridSearchTool
+from agrag.tools import create_hybrid_search_tool
+from agrag.storage import PostgresClient
 
-tool = HybridSearchTool()
+postgres_client = PostgresClient()
+
+tool = create_hybrid_search_tool(postgres_client)
 result = tool.invoke({
     "query": "tests for LTE signaling with timeout errors",
     "k": 10,
@@ -396,38 +442,48 @@ metrics = evaluate_retrieval(retrieved, relevant, k_values=[1, 3, 5, 10])
 ```
 src/agrag/
 ├── cli/              # CLI application
-│   ├── main.py       # Commands: query, chat, load, init, generate, etc.
-│   └── interactive.py # Interactive chat interface
+│   ├── main.py       # Commands: query, chat, load, init, generate, evaluate, etc.
+│   ├── interactive.py # Interactive chat interface
+│   ├── display.py    # Output formatting utilities
+│   ├── hitl.py       # Human-in-the-loop utilities
+│   ├── thinking.py   # Gemini thinking budget configuration
+│   └── commands.py   # Command handler helpers
 ├── config/           # Configuration and logging
-├── core/             # StateGraph agent
+├── core/             # Agent using create_agent API
 │   ├── state.py      # AgentState definition
-│   ├── nodes.py      # Graph nodes
-│   ├── graph.py      # StateGraph builder
+│   ├── graph.py      # create_agent_graph() with middleware support
 │   └── checkpointing.py # HITL checkpointing
 ├── data/             # Data generation and ingestion
-│   ├── generators/   # Synthetic data generation
+│   ├── generators/   # Synthetic data generation (TGF-compatible)
 │   ├── loaders/      # Document and code loaders
 │   │   ├── base.py           # Abstract base classes
 │   │   ├── document_loader.py # Docling integration
 │   │   ├── code_loader.py    # Repository walker
+│   │   ├── tgf_loader.py     # TGF CSV loader for Ericsson test data
 │   │   └── splitters/        # Text splitters
 │   │       ├── code_splitter.py     # AST-based
 │   │       ├── markdown_splitter.py # Header-based
 │   │       └── semantic_splitter.py # Embeddings-based
 │   ├── dual_storage_writer.py # Coordinated DB writes
 │   └── ingestion.py  # Data ingestion pipeline
-├── evaluation/       # Evaluation metrics
+├── evaluation/       # Evaluation framework
+│   ├── metrics.py    # P@k, R@k, MAP, MRR calculations
+│   ├── agentic_evaluator.py # Full agent pipeline evaluation
+│   ├── entity_extractor.py  # Extract entity IDs from responses
+│   └── tool_tracker.py      # Tool usage statistics
 ├── kg/               # Knowledge graph ontology
+├── middleware/       # Agent middleware
+│   └── pii.py        # PII detection and redaction
 ├── models/           # LLM and embedding wrappers
 ├── storage/          # Database clients
 │   ├── neo4j_client.py
 │   ├── postgres_client.py
 │   └── bm25_retriever.py
-└── tools/            # Retrieval tools
-    ├── vector_search.py
-    ├── keyword_search.py
-    ├── graph_traverse.py
-    ├── hybrid_search.py
+└── tools/            # Retrieval tools (@tool decorator pattern)
+    ├── vector_search.py   # create_vector_search_tool()
+    ├── keyword_search.py  # create_keyword_search_tool()
+    ├── graph_traverse.py  # create_graph_traverse_tool()
+    ├── hybrid_search.py   # create_hybrid_search_tool()
     └── schemas.py
 ```
 
@@ -499,6 +555,21 @@ md_splitter = MarkdownSplitter(max_chunk_size=1000)
 sections = md_splitter.split_text(markdown_content)
 ```
 
+#### TGF (Test Governance Framework) Loading
+```python
+from agrag.data.loaders import TGFLoader
+
+# Load TGF CSV with test execution results
+loader = TGFLoader("data/tgf_export.csv")
+test_cases = loader.load()
+
+# Entities include relationships to requirements and functions
+for tc in test_cases:
+    print(tc.to_test_case_entity())  # id, name, test_type, etc.
+    print(tc.requirement_ids)  # Related requirement IDs
+    print(tc.function_names)   # Functions under test
+```
+
 ### Database Management
 
 #### Dual Storage Writes
@@ -528,20 +599,28 @@ The system implements a domain-specific ontology covering:
 - Vector embeddings for all entities (768-dim)
 
 ### RQ2: Retrieval Strategy Comparison
-Four retrieval strategies implemented:
-- **Vector Search**: Semantic similarity (Neo4j vector index)
-- **Keyword Search**: Lexical matching (PostgreSQL FTS)
-- **Graph Traversal**: Structural relationships (Cypher queries)
-- **Hybrid Search**: RRF fusion of vector + keyword
+Five retrieval strategies implemented and evaluated:
+- **Vector Search**: Semantic similarity (PostgreSQL pgvector HNSW)
+- **Keyword Search**: Lexical matching (PostgreSQL pg_search BM25)
+- **Graph Traversal**: Structural relationships (Neo4j Cypher queries)
+- **Hybrid Search**: RRF fusion of vector + keyword (PostgreSQL-native)
+- **Agent**: Dynamic strategy selection via LLM reasoning
 
-Evaluation framework supports comparative analysis with Precision@k, Recall@k, MAP, and MRR.
+The agentic evaluation framework (`AgenticEvaluator`) enables:
+- Full agent pipeline testing with dynamic tool selection
+- Comparison of static strategies vs. agent-driven retrieval
+- Tool usage pattern analysis and execution statistics
+- Entity extraction from natural language responses
+
+Evaluation framework supports comparative analysis with Precision@k, Recall@k, MAP, MRR, and F1@k.
 
 ### RQ3: HITL Workflows
-LangGraph StateGraph with PostgresSaver checkpointing enables:
+LangChain create_agent API with PostgresSaver checkpointing enables:
 - Conversation persistence across sessions
-- Human approval before tool execution
+- Human approval before tool execution (via HumanInTheLoopMiddleware)
 - State inspection and modification
 - Thread-based conversation management
+- Safe mode (default) vs YOLO mode for autonomous execution
 
 ## License
 

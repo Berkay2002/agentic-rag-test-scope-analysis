@@ -7,14 +7,30 @@ Aligned with LangChain / LangGraph HITL conventions:
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
 from langchain_core.runnables import RunnableConfig
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import Application
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 from rich.console import Console
 from langgraph.types import Command
+
+
+class DecisionChoice(Enum):
+    """Available decision choices for HITL."""
+
+    APPROVE = "approve"
+    APPROVE_REMEMBER = "approve_remember"
+    REJECT = "reject"
+    EDIT = "edit"
+    COMMENT = "comment"
 
 
 @dataclass
@@ -23,6 +39,7 @@ class HITLResult:
 
     decision_type: str  # "approve", "edit", or "reject"
     command: Command  # The Command to resume execution
+    remember_tools: List[str] = field(default_factory=list)  # Tools to auto-approve
 
 
 @dataclass
@@ -195,6 +212,8 @@ class HITLHandler:
         self.session = session
         self.style = style
         self.graph = graph
+        # Tools that are auto-approved for this session
+        self.remembered_tools: Set[str] = set()
 
     def handle_interrupt(
         self,
@@ -210,9 +229,19 @@ class HITLHandler:
         Returns:
             HITLResult with decision_type and Command to resume execution.
         """
-        self.console.print("\n[bold yellow]🚦 Approval Required[/bold yellow]\n")
         action_requests = extract_hitl_request(event, self.graph, config)
 
+        # Check if all tools are remembered (auto-approve)
+        if action_requests and all(
+            action.name in self.remembered_tools for action in action_requests
+        ):
+            tool_names = [a.name for a in action_requests]
+            self.console.print(
+                f"\n[dim]🔄 Auto-approved (remembered): {', '.join(tool_names)}[/dim]"
+            )
+            return self._build_approve_result(action_requests)
+
+        self.console.print("\n[bold yellow]🚦 Approval Required[/bold yellow]\n")
         self._display_action_requests(action_requests)
         return self._prompt_for_decision(action_requests)
 
@@ -222,12 +251,12 @@ class HITLHandler:
             self.console.print("[dim]The agent wants to execute the following tools:[/dim]\n")
             for idx, action in enumerate(action_requests, start=1):
                 args_json = json.dumps(action.arguments, indent=2)
-                allowed_set = action.allowed_decisions or {"approve", "edit", "reject"}
-                allowed = ", ".join(sorted(allowed_set))
+                remembered = (
+                    " [green](remembered)[/green]" if action.name in self.remembered_tools else ""
+                )
                 self.console.print(
-                    f"[cyan]{idx}. Tool:[/cyan] {action.name}\n"
+                    f"[cyan]{idx}. Tool:[/cyan] [bold]{action.name}[/bold]{remembered}\n"
                     f"   [cyan]Args:[/cyan]\n{args_json}\n"
-                    f"   [dim]Allowed decisions: {allowed}[/dim]\n"
                 )
                 if action.description:
                     self.console.print(f"   [dim]{action.description}[/dim]\n")
@@ -237,56 +266,226 @@ class HITLHandler:
                 "approve to continue or reject to stop.[/dim]\n"
             )
 
-    def _get_prompt_options(self, action_requests: List[ActionRequest]) -> str:
-        """Get prompt options based on allowed decisions."""
-        if not action_requests:
-            return "yes/no/edit"
+    def _build_menu_options(
+        self,
+        action_requests: List[ActionRequest],
+    ) -> List[tuple[DecisionChoice, str, str]]:
+        """Build menu options based on allowed decisions.
 
-        # Use intersection of all allowed decisions
-        first_allowed = action_requests[0].allowed_decisions or {"approve", "edit", "reject"}
-        all_allowed = first_allowed.copy()
-        for action in action_requests[1:]:
-            action_allowed = action.allowed_decisions or {"approve", "edit", "reject"}
-            all_allowed &= action_allowed
+        Returns:
+            List of (DecisionChoice, display_text, description) tuples.
+        """
+        options: List[tuple[DecisionChoice, str, str]] = []
 
-        options = []
+        # Check allowed decisions from first action (use intersection for multiple)
+        if action_requests:
+            first_allowed = action_requests[0].allowed_decisions or {"approve", "edit", "reject"}
+            all_allowed = first_allowed.copy()
+            for action in action_requests[1:]:
+                action_allowed = action.allowed_decisions or {"approve", "edit", "reject"}
+                all_allowed &= action_allowed
+        else:
+            all_allowed = {"approve", "edit", "reject"}
+
         if "approve" in all_allowed:
-            options.append("yes")
-        if "reject" in all_allowed:
-            options.append("no")
-        if "edit" in all_allowed:
-            options.append("edit")
+            options.append((DecisionChoice.APPROVE, "✓ Yes, approve", "Execute the tool(s)"))
+            # Only show remember option if there are named tools
+            if action_requests:
+                tool_names = ", ".join(a.name for a in action_requests)
+                options.append(
+                    (
+                        DecisionChoice.APPROVE_REMEMBER,
+                        "✓ Yes, and remember this session",
+                        f"Auto-approve [{tool_names}] for rest of session",
+                    )
+                )
 
-        return "/".join(options) if options else "yes/no"
+        if "reject" in all_allowed:
+            options.append((DecisionChoice.REJECT, "✗ No, reject", "Cancel this action"))
+
+        if "edit" in all_allowed:
+            options.append((DecisionChoice.EDIT, "✎ Edit arguments", "Modify the tool arguments"))
+
+        options.append(
+            (DecisionChoice.COMMENT, "💬 Add a comment", "Provide feedback or instructions")
+        )
+
+        return options
+
+    def _create_menu_app(
+        self,
+        options: List[tuple[DecisionChoice, str, str]],
+    ) -> tuple[Application, list]:
+        """Create an interactive menu application.
+
+        Returns:
+            Tuple of (Application, mutable result list).
+        """
+        selected_index = [0]  # Mutable to allow modification in closure
+        result = [None]  # Store the selected option
+
+        def get_formatted_text():
+            lines = []
+            lines.append(("class:header", "Use ↑↓ arrows to select, Enter to confirm:\n\n"))
+            for i, (choice, text, desc) in enumerate(options):
+                if i == selected_index[0]:
+                    lines.append(("class:selected", f"  ▸ {text}\n"))
+                    lines.append(("class:selected-desc", f"    {desc}\n"))
+                else:
+                    lines.append(("class:option", f"    {text}\n"))
+            return lines
+
+        kb = KeyBindings()
+
+        @kb.add("up")
+        def move_up(event):
+            selected_index[0] = (selected_index[0] - 1) % len(options)
+
+        @kb.add("down")
+        def move_down(event):
+            selected_index[0] = (selected_index[0] + 1) % len(options)
+
+        @kb.add("enter")
+        def select(event):
+            result[0] = options[selected_index[0]][0]
+            event.app.exit()
+
+        @kb.add("c-c")
+        def cancel(event):
+            result[0] = DecisionChoice.REJECT
+            event.app.exit()
+
+        @kb.add("escape")
+        def escape(event):
+            result[0] = DecisionChoice.REJECT
+            event.app.exit()
+
+        # Quick keys
+        @kb.add("y")
+        def quick_yes(event):
+            result[0] = DecisionChoice.APPROVE
+            event.app.exit()
+
+        @kb.add("n")
+        def quick_no(event):
+            result[0] = DecisionChoice.REJECT
+            event.app.exit()
+
+        @kb.add("e")
+        def quick_edit(event):
+            if any(c == DecisionChoice.EDIT for c, _, _ in options):
+                result[0] = DecisionChoice.EDIT
+                event.app.exit()
+
+        menu_style = Style.from_dict(
+            {
+                "header": "#888888",
+                "selected": "#00ff00 bold",
+                "selected-desc": "#00aa00 italic",
+                "option": "#cccccc",
+            }
+        )
+
+        layout = Layout(
+            HSplit(
+                [
+                    Window(content=FormattedTextControl(get_formatted_text)),
+                ]
+            )
+        )
+
+        app = Application(
+            layout=layout,
+            key_bindings=kb,
+            style=menu_style,
+            full_screen=False,
+            mouse_support=True,
+            erase_when_done=True,  # Clear menu from terminal after selection
+        )
+
+        return app, result
 
     def _prompt_for_decision(
         self,
         action_requests: List[ActionRequest],
     ) -> HITLResult:
-        """Prompt user for approval decision."""
-        prompt_options = self._get_prompt_options(action_requests)
+        """Prompt user for approval decision using interactive menu."""
+        options = self._build_menu_options(action_requests)
 
         while True:
-            response = (
-                self.session.prompt(
-                    f"Approve? ({prompt_options}): ",
-                    style=self.style,
-                )
-                .strip()
-                .lower()
-            )
+            app, result = self._create_menu_app(options)
+            app.run()
 
-            if response in ["yes", "y"]:
+            choice = result[0]
+
+            if choice == DecisionChoice.APPROVE:
                 return self._build_approve_result(action_requests)
-            elif response in ["no", "n"]:
+
+            elif choice == DecisionChoice.APPROVE_REMEMBER:
+                # Remember these tools for the session
+                for action in action_requests:
+                    self.remembered_tools.add(action.name)
+                tool_names = [a.name for a in action_requests]
+                self.console.print(
+                    f"[green]✓ Approved and remembered: {', '.join(tool_names)}[/green]\n"
+                )
+                decisions = build_decisions(action_requests, "approve")
+                return HITLResult(
+                    decision_type="approve",
+                    command=Command(resume={"decisions": decisions}),
+                    remember_tools=tool_names,
+                )
+
+            elif choice == DecisionChoice.REJECT:
                 return self._build_reject_result(action_requests)
-            elif response == "edit":
-                result = self._build_edit_result(action_requests)
-                if result:
-                    return result
-                # Edit failed, loop continues
+
+            elif choice == DecisionChoice.EDIT:
+                edit_result = self._build_edit_result(action_requests)
+                if edit_result:
+                    return edit_result
+                # Edit failed, show menu again
+
+            elif choice == DecisionChoice.COMMENT:
+                comment_result = self._handle_comment(action_requests)
+                if comment_result:
+                    return comment_result
+                # Comment cancelled, show menu again
+
+    def _handle_comment(
+        self,
+        action_requests: List[ActionRequest],
+    ) -> Optional[HITLResult]:
+        """Handle user comment/feedback.
+
+        Returns:
+            HITLResult if user wants to proceed with comment, None to return to menu.
+        """
+        self.console.print("\n[yellow]Enter your comment or feedback:[/yellow]")
+        self.console.print(
+            "[dim](This will be sent to the agent. Press Enter to submit, Ctrl+C to cancel)[/dim]"
+        )
+
+        try:
+            comment = self.session.prompt("Comment: ").strip()
+            if comment:
+                self.console.print(
+                    "[green]✓ Comment noted. Proceeding with execution...[/green]\n"
+                )
+                # Approve but include the comment in the decision
+                decisions = build_decisions(action_requests, "approve")
+                # Add comment to the first decision
+                if decisions:
+                    decisions[0]["comment"] = comment
+                return HITLResult(
+                    decision_type="approve",
+                    command=Command(resume={"decisions": decisions}),
+                )
             else:
-                self.console.print(f"[yellow]Please respond with {prompt_options}[/yellow]")
+                self.console.print("[dim]No comment provided. Returning to menu...[/dim]\n")
+                return None
+        except KeyboardInterrupt:
+            self.console.print("\n[dim]Cancelled. Returning to menu...[/dim]\n")
+            return None
 
     def _build_approve_result(
         self,
@@ -322,11 +521,12 @@ class HITLHandler:
         Returns:
             HITLResult if successful, None if edit failed and should retry.
         """
-        self.console.print("[yellow]Edit mode - enter new arguments as JSON:[/yellow]")
+        self.console.print("\n[yellow]Edit mode - enter new arguments as JSON:[/yellow]")
         try:
             if action_requests:
                 action = action_requests[0]
-                self.console.print(f"Current args: {json.dumps(action.arguments)}")
+                self.console.print(f"[dim]Current args:[/dim] {json.dumps(action.arguments)}")
+                self.console.print("[dim](Press Ctrl+C to cancel)[/dim]")
                 new_args_str = self.session.prompt("New args (JSON): ").strip()
                 new_args = json.loads(new_args_str)
 
@@ -344,12 +544,12 @@ class HITLHandler:
                     decision_type="approve",
                     command=Command(resume={"decisions": [{"type": "approve"}]}),
                 )
+        except KeyboardInterrupt:
+            self.console.print("\n[dim]Edit cancelled. Returning to menu...[/dim]\n")
+            return None
         except json.JSONDecodeError:
-            self.console.print("[red]Invalid JSON. Try again or use 'no' to reject.[/red]")
+            self.console.print("[red]Invalid JSON. Returning to menu...[/red]\n")
             return None
         except Exception as e:
-            self.console.print(f"[red]Edit failed: {e}. Rejecting.[/red]")
-            return HITLResult(
-                decision_type="reject",
-                command=Command(resume={"decisions": [{"type": "reject", "message": str(e)}]}),
-            )
+            self.console.print(f"[red]Edit failed: {e}. Returning to menu...[/red]\n")
+            return None

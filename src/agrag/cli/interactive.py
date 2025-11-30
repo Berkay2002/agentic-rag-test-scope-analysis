@@ -3,6 +3,7 @@
 import sys
 import traceback
 import uuid
+import warnings
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -11,6 +12,8 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.input import create_input
+from prompt_toolkit.output import create_output
 from prompt_toolkit.styles import Style
 from rich.console import Console
 
@@ -25,6 +28,13 @@ from agrag.cli.hitl import HITLHandler
 from agrag.config import settings
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
+
+# Suppress the CPR warning from prompt_toolkit in terminals that don't support it
+warnings.filterwarnings(
+    "ignore",
+    message=".*cursor position.*",
+    category=UserWarning,
+)
 
 # Available commands for auto-completion
 CHAT_COMMANDS = [
@@ -109,11 +119,23 @@ class InteractiveChat:
         self.history = InMemoryHistory()
         self.completer = WordCompleter(CHAT_COMMANDS, ignore_case=True)
         self.style = Style.from_dict({"prompt": "#00aa00 bold"})
+
+        # Create input/output with CPR (cursor position request) disabled
+        # to avoid the warning in terminals that don't support it (e.g., VS Code)
+        try:
+            pt_input = create_input(always_prefer_tty=True)
+            pt_output = create_output(always_prefer_tty=True)
+        except Exception:
+            pt_input = None
+            pt_output = None
+
         self.session = PromptSession(
             history=self.history,
             auto_suggest=AutoSuggestFromHistory(),
             completer=self.completer,
             style=self.style,
+            input=pt_input,
+            output=pt_output,
         )
 
     def _get_config(self) -> RunnableConfig:
@@ -152,46 +174,86 @@ class InteractiveChat:
 
         try:
             initial_state = create_initial_state(query)
-            tool_calls_this_query = 0
-            model_calls_this_query = 0
+            stats = {"tool_calls": 0, "model_calls": 0}
             final_answer = "No answer generated"
 
             with self.console.status("[bold green]Agent is thinking...") as status:
-                for event in self.graph.stream(initial_state, config=config, stream_mode="values"):
-                    # Check for interrupts (HITL)
-                    if "__interrupt__" in event:
-                        status.stop()
-                        hitl_result = self.hitl_handler.handle_interrupt(event, config)
-                        if hitl_result.decision_type == "reject":
-                            final_answer = "Query cancelled by user."
-                            break
-                        # Resume execution with the Command from HITL handler
-                        self.graph.invoke(hitl_result.command, config=config)
-                        status.start()
-                        status.update("[bold blue]Agent is reasoning...")
-                        continue
-
-                    # Process messages from the event
-                    result = self._process_event(event, status)
-                    if result.get("tool_calls"):
-                        tool_calls_this_query += result["tool_calls"]
-                    if result.get("model_calls"):
-                        model_calls_this_query += result["model_calls"]
-                    if result.get("answer"):
-                        final_answer = result["answer"]
+                result = self._stream_with_hitl(initial_state, config, status, stats)
+                if result.get("answer"):
+                    final_answer = result["answer"]
+                elif result.get("cancelled"):
+                    final_answer = "Query cancelled by user."
 
             # Update stats
-            self.tool_calls_total += tool_calls_this_query
-            self.model_calls_total += model_calls_this_query
+            self.tool_calls_total += stats["tool_calls"]
+            self.model_calls_total += stats["model_calls"]
 
             # Display response
             print_agent_response(self.console, final_answer)
-            print_query_stats(self.console, tool_calls_this_query, model_calls_this_query)
+            print_query_stats(self.console, stats["tool_calls"], stats["model_calls"])
 
         except TimeoutError as e:
             print_error(self.console, f"LLM timeout: {e}")
         except Exception as e:
             print_error(self.console, f"Error: {e}", traceback.format_exc())
+
+    def _stream_with_hitl(
+        self,
+        input_state: Any,
+        config: RunnableConfig,
+        status: Any,
+        stats: Dict[str, int],
+    ) -> Dict[str, Any]:
+        """Stream graph execution with HITL interrupt handling.
+
+        This method handles the streaming loop and recursively processes
+        any HITL interrupts that occur during execution.
+
+        Args:
+            input_state: Initial state or Command to resume with.
+            config: Graph configuration.
+            status: Rich status context for updates.
+            stats: Mutable dict to accumulate tool_calls and model_calls.
+
+        Returns:
+            Dict with 'answer' (str) and/or 'cancelled' (bool).
+        """
+        result: Dict[str, Any] = {}
+
+        for event in self.graph.stream(input_state, config=config, stream_mode="values"):
+            # Check for interrupts (HITL)
+            if "__interrupt__" in event:
+                status.stop()
+                hitl_result = self.hitl_handler.handle_interrupt(event, config)
+                if hitl_result.decision_type == "reject":
+                    result["cancelled"] = True
+                    return result
+
+                # Resume execution with the Command from HITL handler
+                status.start()
+                status.update("[bold blue]Resuming after approval...")
+
+                # Recursively stream the resumed execution
+                resume_result = self._stream_with_hitl(hitl_result.command, config, status, stats)
+
+                # Propagate the final answer or cancellation
+                if resume_result.get("cancelled"):
+                    result["cancelled"] = True
+                    return result
+                if resume_result.get("answer"):
+                    result["answer"] = resume_result["answer"]
+                continue
+
+            # Process messages from the event
+            event_result = self._process_event(event, status)
+            if event_result.get("tool_calls"):
+                stats["tool_calls"] += event_result["tool_calls"]
+            if event_result.get("model_calls"):
+                stats["model_calls"] += event_result["model_calls"]
+            if event_result.get("answer"):
+                result["answer"] = event_result["answer"]
+
+        return result
 
     def _process_event(self, event: Dict[str, Any], status: Any) -> Dict[str, Any]:
         """Process a single stream event.

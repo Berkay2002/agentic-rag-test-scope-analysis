@@ -107,10 +107,14 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
             # Format results
             search_results = []
             for result in results:
+                # Handle None similarity value - use 0.0 as fallback
+                similarity = result.get("similarity")
+                score = float(similarity) if similarity is not None else 0.0
+
                 search_result = SearchResult(
                     id=result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
-                    score=float(result.get("similarity", 0.0)),
+                    score=score,
                     metadata=result.get("metadata", {}),
                     source="pgvector",
                 )
