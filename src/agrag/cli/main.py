@@ -200,13 +200,13 @@ def query(
                 if messages:
                     last_message = messages[-1]
                     msg_type = last_message.__class__.__name__
-                    
+
                     # Check for tool calls
                     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                         tool_call_count += len(last_message.tool_calls)
                         tool_names = [tc.get("name", "unknown") for tc in last_message.tool_calls]
                         click.echo(f"[tools] Executing: {', '.join(tool_names)}")
-                    
+
                     # Check for AI response
                     elif hasattr(last_message, "content") and last_message.content:
                         if hasattr(last_message, "type") and last_message.type == "ai":
@@ -235,7 +235,7 @@ def query(
             # Non-streaming execution - invoke returns the state dict directly
             final_state = graph.invoke(initial_state, config=config)
             messages = final_state.get("messages", [])
-            
+
             # Find the last AI message as the answer
             for msg in reversed(messages):
                 if hasattr(msg, "type") and msg.type == "ai":
@@ -251,7 +251,7 @@ def query(
                                     text_parts.append(part)
                             final_answer = "\n".join(text_parts)
                         break
-                    
+
             # Count tool calls and model calls from messages
             for msg in messages:
                 if hasattr(msg, "tool_calls") and msg.tool_calls:

@@ -199,12 +199,12 @@ class AgenticEvaluator:
 
             # Extract results from the new state format
             messages = final_state.get("messages", [])
-            
+
             # Find final answer from the last AI message
             final_answer = ""
             tool_call_count = 0
             model_call_count = 0
-            
+
             for msg in messages:
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     tool_call_count += len(msg.tool_calls)
@@ -223,7 +223,7 @@ class AgenticEvaluator:
                                     elif isinstance(part, str):
                                         text_parts.append(part)
                                 final_answer = "\n".join(text_parts)
-            
+
             result.final_answer = final_answer
             result.tool_call_count = tool_call_count
             result.model_call_count = model_call_count

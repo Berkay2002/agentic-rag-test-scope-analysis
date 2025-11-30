@@ -13,7 +13,7 @@ from agrag.cli.thinking import handle_thinking_command, format_thinking_budget
 
 class ChatSessionProtocol(Protocol):
     """Protocol for chat session state that commands can modify."""
-    
+
     thread_id: str
     message_count: int
     tool_calls_total: int
@@ -21,13 +21,13 @@ class ChatSessionProtocol(Protocol):
     start_time: datetime
     thinking_budget: Optional[int]
     enable_hitl: bool
-    
+
     def _persistence_label(self) -> str: ...
 
 
 def print_help(console: Console) -> None:
     """Print help message.
-    
+
     Args:
         console: Rich console for output.
     """
@@ -53,13 +53,17 @@ def print_help(console: Console) -> None:
 
 def print_stats(console: Console, session: ChatSessionProtocol) -> None:
     """Print conversation statistics.
-    
+
     Args:
         console: Rich console for output.
         session: Chat session with statistics.
     """
     duration = datetime.now() - session.start_time
-    mode = '🚦 Safe Mode (you approve each tool)' if session.enable_hitl else '⚡ YOLO Mode (autonomous)'
+    mode = (
+        "🚦 Safe Mode (you approve each tool)"
+        if session.enable_hitl
+        else "⚡ YOLO Mode (autonomous)"
+    )
     stats = f"""
 **Session Statistics:**
 - Session ID: `{session.thread_id}`
@@ -76,7 +80,7 @@ def print_stats(console: Console, session: ChatSessionProtocol) -> None:
 
 def save_conversation(console: Console, thread_id: str) -> None:
     """Save conversation to file.
-    
+
     Args:
         console: Rich console for output.
         thread_id: Thread ID for filename.
@@ -97,10 +101,10 @@ def save_conversation(console: Console, thread_id: str) -> None:
 
 class CommandHandler:
     """Handles chat commands."""
-    
+
     def __init__(self, console: Console, session: ChatSessionProtocol):
         """Initialize command handler.
-        
+
         Args:
             console: Rich console for output.
             session: Chat session to operate on.
@@ -108,15 +112,15 @@ class CommandHandler:
         self.console = console
         self.session = session
         self._print_welcome_callback = None
-    
+
     def set_welcome_callback(self, callback) -> None:
         """Set callback for printing welcome message (used by /clear).
-        
+
         Args:
             callback: Function to call for printing welcome.
         """
         self._print_welcome_callback = callback
-    
+
     def handle(self, user_input: str) -> bool:
         """Handle special commands.
 

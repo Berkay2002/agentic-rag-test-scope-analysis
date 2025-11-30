@@ -48,9 +48,7 @@ def _parse_paths(results: List[Dict[str, Any]]) -> List[GraphPath]:
                 graph_node = GraphNode(
                     id=node_dict.get("id", "unknown"),
                     label=node_labels[0] if node_labels else "Unknown",
-                    properties={
-                        k: v for k, v in node_dict.items() if k not in ["embedding", "id"]
-                    },
+                    properties={k: v for k, v in node_dict.items() if k not in ["embedding", "id"]},
                 )
                 nodes.append(graph_node)
         except Exception as e:
@@ -102,8 +100,7 @@ def _format_graph_output(output: GraphTraverseOutput) -> str:
                 relevant_props = {
                     k: v
                     for k, v in end_node.properties.items()
-                    if k
-                    in ["name", "description", "status", "priority", "test_type", "signature"]
+                    if k in ["name", "description", "status", "priority", "test_type", "signature"]
                 }
                 if relevant_props:
                     prop_str = ", ".join([f"{k}: {v}" for k, v in relevant_props.items()])

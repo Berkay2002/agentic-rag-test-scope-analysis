@@ -18,10 +18,10 @@ THINKING_PRESETS = {
 
 def format_thinking_budget(value: Optional[int]) -> str:
     """Return a friendly label for the current thinking budget.
-    
+
     Args:
         value: The thinking budget value (tokens or preset).
-        
+
     Returns:
         Human-readable description of the budget.
     """
@@ -41,7 +41,7 @@ def format_thinking_budget(value: Optional[int]) -> str:
 
 def print_thinking_help(console: Console) -> None:
     """Display thinking configuration help.
-    
+
     Args:
         console: Rich console for output.
     """
@@ -69,12 +69,12 @@ def handle_thinking_command(
     current_budget: Optional[int],
 ) -> Optional[int]:
     """Handle the /thinking command.
-    
+
     Args:
         console: Rich console for output.
         raw_command: The full command string.
         current_budget: Current thinking budget value.
-        
+
     Returns:
         New thinking budget if changed, None otherwise.
     """

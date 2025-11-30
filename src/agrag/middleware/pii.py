@@ -9,7 +9,7 @@ passed to create_agent_graph() via the middleware parameter.
 Example:
     from agrag.middleware import get_pii_middleware
     from agrag.core import create_agent_graph
-    
+
     # Apply PII protection
     agent = create_agent_graph(middleware=get_pii_middleware())
 """
@@ -29,10 +29,10 @@ def get_pii_middleware(
 ) -> List[PIIMiddleware]:
     """
     Get pre-configured PII detection middleware.
-    
+
     This middleware detects and handles common PII types in conversations.
     By default, it redacts emails and credit cards from both inputs and outputs.
-    
+
     Args:
         redact_emails: Whether to redact email addresses (default: True)
         redact_credit_cards: Whether to redact credit card numbers (default: True)
@@ -40,19 +40,19 @@ def get_pii_middleware(
         apply_to_input: Check user messages before model call (default: True)
         apply_to_output: Check AI messages after model call (default: True)
         apply_to_tool_results: Check tool results (default: False)
-    
+
     Returns:
         List of configured PIIMiddleware instances
-    
+
     Example:
         >>> middleware = get_pii_middleware()
         >>> agent = create_agent_graph(middleware=middleware)
-        
+
         # User input "My email is john@example.com" becomes:
         # "My email is [REDACTED_EMAIL]"
     """
     middleware = []
-    
+
     if redact_emails:
         middleware.append(
             PIIMiddleware(
@@ -63,7 +63,7 @@ def get_pii_middleware(
                 apply_to_tool_results=apply_to_tool_results,
             )
         )
-    
+
     if redact_credit_cards:
         middleware.append(
             PIIMiddleware(
@@ -74,7 +74,7 @@ def get_pii_middleware(
                 apply_to_tool_results=apply_to_tool_results,
             )
         )
-    
+
     if redact_ips:
         middleware.append(
             PIIMiddleware(
@@ -85,7 +85,7 @@ def get_pii_middleware(
                 apply_to_tool_results=apply_to_tool_results,
             )
         )
-    
+
     return middleware
 
 
@@ -96,28 +96,28 @@ def get_safety_middleware(
 ) -> List[PIIMiddleware]:
     """
     Get safety middleware that blocks sensitive patterns.
-    
+
     Unlike redaction, blocking raises an exception when sensitive
     data is detected, preventing it from being processed entirely.
-    
+
     Args:
         block_api_keys: Block API key patterns (default: True)
         block_passwords: Block common password patterns (default: True)
         custom_patterns: List of custom patterns to block, each dict should have:
             - name: Name for the pattern
             - detector: Regex pattern string
-    
+
     Returns:
         List of configured PIIMiddleware instances
-    
+
     Example:
         >>> middleware = get_safety_middleware()
         >>> agent = create_agent_graph(middleware=middleware)
-        
+
         # User input containing "sk-abc123..." will raise an exception
     """
     middleware = []
-    
+
     if block_api_keys:
         # OpenAI-style API keys
         middleware.append(
@@ -137,7 +137,7 @@ def get_safety_middleware(
                 apply_to_input=True,
             )
         )
-    
+
     if block_passwords:
         # Common password field patterns (password=, pwd=, etc.)
         middleware.append(
@@ -148,7 +148,7 @@ def get_safety_middleware(
                 apply_to_input=True,
             )
         )
-    
+
     # Add custom patterns
     if custom_patterns:
         for pattern in custom_patterns:
@@ -160,25 +160,25 @@ def get_safety_middleware(
                     apply_to_input=True,
                 )
             )
-    
+
     return middleware
 
 
 def get_telecom_pii_middleware() -> List[PIIMiddleware]:
     """
     Get PII middleware specifically for telecommunications data.
-    
+
     This includes patterns commonly found in telecom test data:
     - IMSI (International Mobile Subscriber Identity)
     - IMEI (International Mobile Equipment Identity)
     - Phone numbers
     - IP addresses
-    
+
     Returns:
         List of configured PIIMiddleware instances for telecom data
     """
     middleware = []
-    
+
     # IMSI: 15-digit number starting with MCC/MNC
     middleware.append(
         PIIMiddleware(
@@ -189,7 +189,7 @@ def get_telecom_pii_middleware() -> List[PIIMiddleware]:
             apply_to_output=True,
         )
     )
-    
+
     # IMEI: 15-digit number
     middleware.append(
         PIIMiddleware(
@@ -200,7 +200,7 @@ def get_telecom_pii_middleware() -> List[PIIMiddleware]:
             apply_to_output=True,
         )
     )
-    
+
     # Phone numbers (international format)
     middleware.append(
         PIIMiddleware(
@@ -211,7 +211,7 @@ def get_telecom_pii_middleware() -> List[PIIMiddleware]:
             apply_to_output=True,
         )
     )
-    
+
     # IP addresses
     middleware.append(
         PIIMiddleware(
@@ -221,5 +221,5 @@ def get_telecom_pii_middleware() -> List[PIIMiddleware]:
             apply_to_output=True,
         )
     )
-    
+
     return middleware

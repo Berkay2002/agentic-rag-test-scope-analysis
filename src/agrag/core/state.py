@@ -20,7 +20,7 @@ from langgraph.graph import add_messages
 class AgentState(TypedDict):
     """
     Legacy state for the agentic RAG system.
-    
+
     The new create_agent API uses a simpler state with just messages.
     This is kept for backwards compatibility with evaluation code.
 

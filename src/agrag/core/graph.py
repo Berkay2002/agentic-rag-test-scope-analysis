@@ -3,13 +3,12 @@
 import logging
 from typing import List, Optional
 
-from langchain.agents import create_agent, AgentState as LangChainAgentState
+from langchain.agents import create_agent
 from langchain.agents.middleware import (
     HumanInTheLoopMiddleware,
     ModelCallLimitMiddleware,
     ToolCallLimitMiddleware,
 )
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -237,16 +236,18 @@ def create_agent_graph(
         )
 
     # Add limit middleware to prevent runaway execution
-    agent_middleware.extend([
-        ModelCallLimitMiddleware(
-            run_limit=settings.max_model_calls,
-            exit_behavior="end",
-        ),
-        ToolCallLimitMiddleware(
-            run_limit=settings.max_tool_calls,
-            exit_behavior="continue",
-        ),
-    ])
+    agent_middleware.extend(
+        [
+            ModelCallLimitMiddleware(
+                run_limit=settings.max_model_calls,
+                exit_behavior="end",
+            ),
+            ToolCallLimitMiddleware(
+                run_limit=settings.max_tool_calls,
+                exit_behavior="continue",
+            ),
+        ]
+    )
 
     logger.info(f"Configured {len(agent_middleware)} middleware components")
 

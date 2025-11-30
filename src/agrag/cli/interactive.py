@@ -4,7 +4,7 @@ import sys
 import traceback
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 
 from langchain_core.runnables import RunnableConfig
 from prompt_toolkit import PromptSession
@@ -21,7 +21,7 @@ from agrag.cli.display import (
     print_query_stats,
     print_welcome,
 )
-from agrag.cli.hitl import HITLHandler, HITLResult
+from agrag.cli.hitl import HITLHandler
 from agrag.config import settings
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
@@ -73,10 +73,8 @@ class InteractiveChat:
         # Initialize handlers
         self.command_handler = CommandHandler(self.console, self)
         self.command_handler.set_welcome_callback(self._print_welcome)
-        
-        self.hitl_handler = HITLHandler(
-            self.console, self.session, self.style, self.graph
-        )
+
+        self.hitl_handler = HITLHandler(self.console, self.session, self.style, self.graph)
 
         # Conversation stats
         self.message_count = 0
@@ -159,9 +157,7 @@ class InteractiveChat:
             final_answer = "No answer generated"
 
             with self.console.status("[bold green]Agent is thinking...") as status:
-                for event in self.graph.stream(
-                    initial_state, config=config, stream_mode="values"
-                ):
+                for event in self.graph.stream(initial_state, config=config, stream_mode="values"):
                     # Check for interrupts (HITL)
                     if "__interrupt__" in event:
                         status.stop()
@@ -197,49 +193,45 @@ class InteractiveChat:
         except Exception as e:
             print_error(self.console, f"Error: {e}", traceback.format_exc())
 
-    def _process_event(
-        self, 
-        event: Dict[str, Any], 
-        status: Any
-    ) -> Dict[str, Any]:
+    def _process_event(self, event: Dict[str, Any], status: Any) -> Dict[str, Any]:
         """Process a single stream event.
-        
+
         Args:
             event: The stream event.
             status: Rich status context for updates.
-            
+
         Returns:
             Dict with tool_calls, model_calls, and answer counts/values.
         """
         result: Dict[str, Any] = {}
         messages = event.get("messages", [])
-        
+
         if not messages:
             return result
-            
+
         last_message = messages[-1]
-        
+
         # Check for AI message with tool calls
         if hasattr(last_message, "tool_calls") and last_message.tool_calls:
             tool_names = [tc.get("name", "unknown") for tc in last_message.tool_calls]
             result["tool_calls"] = len(last_message.tool_calls)
             status.update(f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}")
-        
+
         # Check for model response (AI message without tool calls)
         elif hasattr(last_message, "content") and last_message.content:
             if hasattr(last_message, "type") and last_message.type == "ai":
                 result["model_calls"] = 1
                 result["answer"] = self._extract_content(last_message.content)
                 status.update("[bold blue]Agent is reasoning...")
-        
+
         return result
 
     def _extract_content(self, content: Any) -> str:
         """Extract text content from message content.
-        
+
         Args:
             content: Message content (string or list of blocks).
-            
+
         Returns:
             Extracted text content.
         """

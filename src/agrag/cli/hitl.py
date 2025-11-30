@@ -2,7 +2,7 @@
 
 Aligned with LangChain / LangGraph HITL conventions:
 - Extracts action_requests and review_configs from interrupt value
-- Respects allowed_decisions per tool from review_configs  
+- Respects allowed_decisions per tool from review_configs
 - Returns Command(resume={"decisions": [...]}) for caller to invoke
 """
 
@@ -17,9 +17,10 @@ from rich.console import Console
 from langgraph.types import Command
 
 
-@dataclass 
+@dataclass
 class HITLResult:
     """Result from HITL handler containing the resume command."""
+
     decision_type: str  # "approve", "edit", or "reject"
     command: Command  # The Command to resume execution
 
@@ -27,11 +28,12 @@ class HITLResult:
 @dataclass
 class ActionRequest:
     """Represents a tool action pending approval."""
+
     name: str
     arguments: Dict[str, Any]
     description: str = ""
     allowed_decisions: Optional[Set[str]] = None
-    
+
     def __post_init__(self):
         if self.allowed_decisions is None:
             self.allowed_decisions = {"approve", "edit", "reject"}
@@ -43,32 +45,32 @@ def extract_hitl_request(
     config: RunnableConfig,
 ) -> List[ActionRequest]:
     """Extract action requests from an interrupt event.
-    
+
     Parses the HITL request structure from LangChain:
     - action_requests: [{name, arguments, description}, ...]
     - review_configs: [{action_name, allowed_decisions}, ...]
-    
+
     Args:
         event: The interrupt event containing __interrupt__ key.
         graph: The LangGraph graph instance.
         config: Graph configuration.
-        
+
     Returns:
         List of ActionRequest objects with allowed_decisions populated.
     """
     action_requests: List[ActionRequest] = []
-    
+
     interrupt_data = event.get("__interrupt__")
     if not interrupt_data:
         return _fallback_extract_from_state(graph, config)
-    
+
     # Build lookup for allowed_decisions from review_configs
     allowed_decisions_map: Dict[str, Set[str]] = {}
-    
+
     for interrupt in interrupt_data:
         if not (hasattr(interrupt, "value") and isinstance(interrupt.value, dict)):
             continue
-            
+
         # Extract review_configs first to build allowed_decisions map
         review_configs = interrupt.value.get("review_configs", [])
         for rc in review_configs:
@@ -76,19 +78,21 @@ def extract_hitl_request(
             allowed = rc.get("allowed_decisions", ["approve", "edit", "reject"])
             if action_name:
                 allowed_decisions_map[action_name] = set(allowed)
-        
+
         # Extract action_requests
         for action in interrupt.value.get("action_requests", []):
             name = action.get("name", "")
-            action_requests.append(ActionRequest(
-                name=name,
-                arguments=action.get("arguments", {}),
-                description=action.get("description", ""),
-                allowed_decisions=allowed_decisions_map.get(
-                    name, {"approve", "edit", "reject"}
-                ),
-            ))
-    
+            action_requests.append(
+                ActionRequest(
+                    name=name,
+                    arguments=action.get("arguments", {}),
+                    description=action.get("description", ""),
+                    allowed_decisions=allowed_decisions_map.get(
+                        name, {"approve", "edit", "reject"}
+                    ),
+                )
+            )
+
     return action_requests or _fallback_extract_from_state(graph, config)
 
 
@@ -105,10 +109,12 @@ def _fallback_extract_from_state(
             last_message = messages[-1]
             if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                 for call in last_message.tool_calls:
-                    action_requests.append(ActionRequest(
-                        name=call.get("name", "unknown"),
-                        arguments=call.get("args", {}),
-                    ))
+                    action_requests.append(
+                        ActionRequest(
+                            name=call.get("name", "unknown"),
+                            arguments=call.get("args", {}),
+                        )
+                    )
     except Exception:
         pass
     return action_requests
@@ -121,13 +127,13 @@ def build_decisions(
     edited_action: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Build decision list for Command(resume={"decisions": [...]}).
-    
+
     Args:
         action_requests: List of actions to decide on.
         decision_type: "approve", "edit", or "reject".
         message: Rejection message (for reject decisions).
         edited_action: Edited action dict with name/args (for edit decisions).
-        
+
     Returns:
         List of decision dicts in LangChain 1.1.0 format.
     """
@@ -136,45 +142,49 @@ def build_decisions(
         if decision_type == "reject":
             return [{"type": "reject", "message": message or "Action rejected by user"}]
         return [{"type": "approve"}]
-    
+
     decisions: List[Dict[str, Any]] = []
     for i, action in enumerate(action_requests):
         if decision_type == "approve":
             decisions.append({"type": "approve"})
         elif decision_type == "reject":
-            decisions.append({
-                "type": "reject",
-                "message": message or "Action rejected by user",
-            })
+            decisions.append(
+                {
+                    "type": "reject",
+                    "message": message or "Action rejected by user",
+                }
+            )
         elif decision_type == "edit" and i == 0 and edited_action:
             # Only first action gets edited, rest are approved
-            decisions.append({
-                "type": "edit",
-                "edited_action": edited_action,
-            })
+            decisions.append(
+                {
+                    "type": "edit",
+                    "edited_action": edited_action,
+                }
+            )
         else:
             # Default to approve for remaining actions
             decisions.append({"type": "approve"})
-    
+
     return decisions
 
 
 class HITLHandler:
     """Handles Human-in-the-Loop interrupts.
-    
+
     Returns HITLResult with Command for caller to invoke, following
     LangChain 1.1.0 pattern where the caller controls graph execution.
     """
-    
+
     def __init__(
-        self, 
-        console: Console, 
+        self,
+        console: Console,
         session: PromptSession,
         style: Style,
         graph: Any,
     ):
         """Initialize HITL handler.
-        
+
         Args:
             console: Rich console for output.
             session: Prompt toolkit session for input.
@@ -185,10 +195,10 @@ class HITLHandler:
         self.session = session
         self.style = style
         self.graph = graph
-    
+
     def handle_interrupt(
-        self, 
-        event: Dict[str, Any], 
+        self,
+        event: Dict[str, Any],
         config: RunnableConfig,
     ) -> HITLResult:
         """Handle HITL interrupt and return Command for caller to invoke.
@@ -196,7 +206,7 @@ class HITLHandler:
         Args:
             event: The interrupt event containing action_requests and review_configs.
             config: The graph config.
-            
+
         Returns:
             HITLResult with decision_type and Command to resume execution.
         """
@@ -205,7 +215,7 @@ class HITLHandler:
 
         self._display_action_requests(action_requests)
         return self._prompt_for_decision(action_requests)
-    
+
     def _display_action_requests(self, action_requests: List[ActionRequest]) -> None:
         """Display the proposed tool calls to the user."""
         if action_requests:
@@ -226,19 +236,19 @@ class HITLHandler:
                 "[dim]No structured tool call details available; "
                 "approve to continue or reject to stop.[/dim]\n"
             )
-    
+
     def _get_prompt_options(self, action_requests: List[ActionRequest]) -> str:
         """Get prompt options based on allowed decisions."""
         if not action_requests:
             return "yes/no/edit"
-        
+
         # Use intersection of all allowed decisions
         first_allowed = action_requests[0].allowed_decisions or {"approve", "edit", "reject"}
         all_allowed = first_allowed.copy()
         for action in action_requests[1:]:
             action_allowed = action.allowed_decisions or {"approve", "edit", "reject"}
             all_allowed &= action_allowed
-        
+
         options = []
         if "approve" in all_allowed:
             options.append("yes")
@@ -246,16 +256,16 @@ class HITLHandler:
             options.append("no")
         if "edit" in all_allowed:
             options.append("edit")
-        
+
         return "/".join(options) if options else "yes/no"
-    
+
     def _prompt_for_decision(
-        self, 
+        self,
         action_requests: List[ActionRequest],
     ) -> HITLResult:
         """Prompt user for approval decision."""
         prompt_options = self._get_prompt_options(action_requests)
-        
+
         while True:
             response = (
                 self.session.prompt(
@@ -277,9 +287,9 @@ class HITLHandler:
                 # Edit failed, loop continues
             else:
                 self.console.print(f"[yellow]Please respond with {prompt_options}[/yellow]")
-    
+
     def _build_approve_result(
-        self, 
+        self,
         action_requests: List[ActionRequest],
     ) -> HITLResult:
         """Build approval result."""
@@ -289,9 +299,9 @@ class HITLHandler:
             decision_type="approve",
             command=Command(resume={"decisions": decisions}),
         )
-    
+
     def _build_reject_result(
-        self, 
+        self,
         action_requests: List[ActionRequest],
         message: str = "Action rejected by user",
     ) -> HITLResult:
@@ -302,13 +312,13 @@ class HITLHandler:
             decision_type="reject",
             command=Command(resume={"decisions": decisions}),
         )
-    
+
     def _build_edit_result(
-        self, 
+        self,
         action_requests: List[ActionRequest],
     ) -> Optional[HITLResult]:
         """Build edit result.
-        
+
         Returns:
             HITLResult if successful, None if edit failed and should retry.
         """
@@ -319,12 +329,10 @@ class HITLHandler:
                 self.console.print(f"Current args: {json.dumps(action.arguments)}")
                 new_args_str = self.session.prompt("New args (JSON): ").strip()
                 new_args = json.loads(new_args_str)
-                
+
                 edited_action = {"name": action.name, "args": new_args}
-                decisions = build_decisions(
-                    action_requests, "edit", edited_action=edited_action
-                )
-                
+                decisions = build_decisions(action_requests, "edit", edited_action=edited_action)
+
                 self.console.print("[green]✓ Edited. Continuing...[/green]\n")
                 return HITLResult(
                     decision_type="edit",

@@ -12,7 +12,7 @@ def print_welcome(
     enable_hitl: bool,
 ) -> None:
     """Print welcome message.
-    
+
     Args:
         console: Rich console for output.
         thread_id: Current session thread ID.
@@ -44,7 +44,9 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
         welcome += f"Resume with: `agrag chat --thread-id {thread_id}`\n"
     elif checkpointer_backend == "memory":
         welcome += f"\n**Session ID:** `{thread_id}`\n"
-        welcome += "Session data is stored in memory for this run only (cannot be resumed after exit).\n"
+        welcome += (
+            "Session data is stored in memory for this run only (cannot be resumed after exit).\n"
+        )
 
     if enable_hitl:
         welcome += "\n**🚦 Safe Mode (HITL)**\n"
@@ -61,7 +63,7 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
 
 def print_agent_response(console: Console, response: str) -> None:
     """Print agent response in a formatted panel.
-    
+
     Args:
         console: Rich console for output.
         response: The agent's response text.
@@ -79,14 +81,14 @@ def print_agent_response(console: Console, response: str) -> None:
 
 def print_query_stats(console: Console, tool_calls: int, model_calls: int) -> None:
     """Print mini statistics for a single query.
-    
+
     Args:
         console: Rich console for output.
         tool_calls: Number of tool calls in this query.
         model_calls: Number of model calls in this query.
     """
     from rich.text import Text
-    
+
     stats_text = Text()
     stats_text.append("Tool calls: ", style="dim")
     stats_text.append(str(tool_calls), style="cyan")
@@ -98,7 +100,7 @@ def print_query_stats(console: Console, tool_calls: int, model_calls: int) -> No
 
 def print_error(console: Console, message: str, traceback_str: str | None = None) -> None:
     """Print an error message.
-    
+
     Args:
         console: Rich console for output.
         message: Error message.
