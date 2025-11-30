@@ -33,6 +33,7 @@ venv.bak/
 
 # PyCharm
 .idea/
+langchain/
 
 # VS Code
 .vscode/
