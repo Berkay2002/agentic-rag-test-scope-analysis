@@ -322,7 +322,7 @@ class HITLHandler:
             Tuple of (Application, mutable result list).
         """
         selected_index = [0]  # Mutable to allow modification in closure
-        result = [None]  # Store the selected option
+        result: List[Optional[DecisionChoice]] = [None]  # Store the selected option
 
         def get_formatted_text():
             lines = []
@@ -468,9 +468,7 @@ class HITLHandler:
         try:
             comment = self.session.prompt("Comment: ").strip()
             if comment:
-                self.console.print(
-                    "[green]✓ Comment noted. Proceeding with execution...[/green]\n"
-                )
+                self.console.print("[green]✓ Comment noted. Proceeding with execution...[/green]\n")
                 # Approve but include the comment in the decision
                 decisions = build_decisions(action_requests, "approve")
                 # Add comment to the first decision
