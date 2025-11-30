@@ -189,7 +189,7 @@ class AgenticEvaluator:
         start_time = time.time()
 
         try:
-            # Create initial state
+            # Create initial state (new format for create_agent API)
             from agrag.core import create_initial_state
 
             initial_state = create_initial_state(query)
@@ -197,10 +197,36 @@ class AgenticEvaluator:
             # Run agent to completion (no HITL interrupts)
             final_state = self.graph.invoke(initial_state, config=self.config)
 
-            # Extract results
-            result.final_answer = final_state.get("final_answer", "")
-            result.tool_call_count = final_state.get("tool_call_count", 0)
-            result.model_call_count = final_state.get("model_call_count", 0)
+            # Extract results from the new state format
+            messages = final_state.get("messages", [])
+            
+            # Find final answer from the last AI message
+            final_answer = ""
+            tool_call_count = 0
+            model_call_count = 0
+            
+            for msg in messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    tool_call_count += len(msg.tool_calls)
+                if hasattr(msg, "type") and msg.type == "ai":
+                    model_call_count += 1
+                    # Check if this is a final response (no tool calls)
+                    if not (hasattr(msg, "tool_calls") and msg.tool_calls):
+                        if hasattr(msg, "content") and msg.content:
+                            if isinstance(msg.content, str):
+                                final_answer = msg.content
+                            elif isinstance(msg.content, list):
+                                text_parts = []
+                                for part in msg.content:
+                                    if isinstance(part, dict) and "text" in part:
+                                        text_parts.append(part["text"])
+                                    elif isinstance(part, str):
+                                        text_parts.append(part)
+                                final_answer = "\n".join(text_parts)
+            
+            result.final_answer = final_answer
+            result.tool_call_count = tool_call_count
+            result.model_call_count = model_call_count
 
             # Extract entity IDs from response
             result.retrieved_ids = extract_entity_ids(
@@ -209,7 +235,6 @@ class AgenticEvaluator:
             )
 
             # Also extract from tool results for more complete coverage
-            messages = final_state.get("messages", [])
             tool_ids = extract_from_tool_results(messages)
 
             # Merge IDs (response IDs first, then tool result IDs)
@@ -356,11 +381,11 @@ def create_evaluation_graph():
     Create an agent graph configured for evaluation (no HITL).
 
     Returns:
-        Compiled StateGraph without HITL interrupts
+        Compiled agent graph without HITL interrupts
     """
     from agrag.core import create_agent_graph
 
-    # Create graph without checkpointer (no HITL)
-    graph = create_agent_graph(checkpointer=None)
+    # Create graph without checkpointer and with HITL disabled
+    graph = create_agent_graph(checkpointer=None, enable_hitl=False)
 
     return graph
