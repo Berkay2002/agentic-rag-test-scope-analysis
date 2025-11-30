@@ -2,12 +2,15 @@
 
 Uses ParadeDB's pg_search extension with true BM25 ranking algorithm for
 cloud-persistent keyword search stored alongside vector embeddings.
+
+Uses the @tool decorator pattern from LangChain for cleaner tool definition.
 """
 
 import time
 from typing import Optional
-from langchain_core.tools import BaseTool
 import logging
+
+from langchain.tools import tool
 
 from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
 from agrag.storage import PostgresClient
@@ -15,56 +18,71 @@ from agrag.storage import PostgresClient
 logger = logging.getLogger(__name__)
 
 
-class KeywordSearchTool(BaseTool):
-    """Tool for keyword-based lexical search using pg_search BM25.
+def _format_keyword_output(output: KeywordSearchOutput) -> str:
+    """Format KeywordSearchOutput for agent consumption.
 
-    Uses ParadeDB's pg_search extension with true BM25 probabilistic ranking,
-    providing cloud-persistent keyword search stored in the same database as
-    vector embeddings.
+    Args:
+        output: KeywordSearchOutput object
+
+    Returns:
+        Formatted string
     """
+    if not output.results:
+        return f"No results found for query: '{output.query}'"
 
-    name: str = "keyword_search"
-    description: str = """Use this tool for exact matches and lexical queries using BM25 ranking.
-    Best for:
-    - Specific identifiers (test IDs, function names, error codes)
-    - Exact keyword matching with BM25 probabilistic ranking
-    - When you know the specific terms that should appear
-    Examples: "TestLoginTimeout", "error code E503", "initiate_handover"
+    lines = [
+        f"Keyword Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
+        f"Query: {output.query}",
+        "",
+    ]
+
+    for i, result in enumerate(output.results, 1):
+        lines.append(f"{i}. ID: {result.id} (FTS Rank: {result.score:.4f})")
+        lines.append(f"   Content: {result.content[:200]}...")
+        if result.metadata:
+            entity_type = result.metadata.get("entity_type", "Unknown")
+            lines.append(f"   Entity Type: {entity_type}")
+        lines.append("")
+
+    lines.append("Note: Uses pg_search extension with true BM25 ranking (ParadeDB).")
+
+    return "\n".join(lines)
+
+
+def create_keyword_search_tool(postgres_client: Optional[PostgresClient] = None):
+    """Factory function to create a keyword search tool with injected dependencies.
+
+    Args:
+        postgres_client: PostgreSQL client instance (creates new if not provided)
+
+    Returns:
+        Configured keyword_search tool
     """
-    args_schema: type[KeywordSearchInput] = KeywordSearchInput  # type: ignore[assignment]
+    client = postgres_client or PostgresClient()
 
-    postgres_client: Optional[PostgresClient] = None
-
-    def __init__(self, postgres_client: Optional[PostgresClient] = None, **kwargs):
-        """
-        Initialize keyword search tool with PostgreSQL full-text search.
-
-        Args:
-            postgres_client: PostgreSQL client instance (creates new if not provided)
-        """
-        super().__init__(**kwargs)
-        self.postgres_client = postgres_client or PostgresClient()
-
-    def _run(
-        self,
+    @tool("keyword_search", args_schema=KeywordSearchInput)
+    def keyword_search(
         query: str,
         k: int = 10,
         entity_type: Optional[str] = None,
     ) -> str:
-        """
-        Execute PostgreSQL full-text keyword search.
+        """Use this tool for exact matches and lexical queries using BM25 ranking.
+
+        Best for:
+        - Specific identifiers (test IDs, function names, error codes)
+        - Exact keyword matching with BM25 probabilistic ranking
+        - When you know the specific terms that should appear
+
+        Examples: "TestLoginTimeout", "error code E503", "initiate_handover"
 
         Args:
-            query: Keyword query string
-            k: Number of results
-            entity_type: Optional entity type filter
-
-        Returns:
-            Formatted search results as string
+            query: Keyword query for exact/lexical matching
+            k: Number of results to return (1-50)
+            entity_type: Filter by entity type (e.g., 'TestCase', 'Function')
         """
         start_time = time.time()
 
-        if self.postgres_client is None:
+        if client is None:
             return "Error: PostgreSQL client not initialized"
 
         try:
@@ -75,7 +93,7 @@ class KeywordSearchTool(BaseTool):
 
             # Perform pg_search BM25 keyword search
             logger.info(f"Performing pg_search BM25 keyword search: {query}")
-            results = self.postgres_client.keyword_search(
+            results = client.keyword_search(
                 query=query,
                 k=k,
                 metadata_filter=metadata_filter if metadata_filter else None,
@@ -102,40 +120,40 @@ class KeywordSearchTool(BaseTool):
                 retrieval_time_ms=retrieval_time_ms,
             )
 
-            # Format for agent consumption
-            return self._format_output(output)
+            return _format_keyword_output(output)
 
         except Exception as e:
             logger.error(f"pg_search BM25 keyword search failed: {e}")
             return f"Error performing keyword search: {str(e)}"
 
-    def _format_output(self, output: KeywordSearchOutput) -> str:
-        """
-        Format output for agent consumption.
+    return keyword_search
+
+
+# For backwards compatibility, provide a class-based wrapper
+class KeywordSearchTool:
+    """Wrapper class for backwards compatibility.
+
+    Use create_keyword_search_tool() factory function for new code.
+    """
+
+    def __init__(self, postgres_client: Optional[PostgresClient] = None):
+        """Initialize keyword search tool.
 
         Args:
-            output: KeywordSearchOutput object
-
-        Returns:
-            Formatted string
+            postgres_client: PostgreSQL client instance (creates new if not provided)
         """
-        if not output.results:
-            return f"No results found for query: '{output.query}'"
+        self._tool = create_keyword_search_tool(postgres_client)
 
-        lines = [
-            f"Keyword Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
-            f"Query: {output.query}",
-            "",
-        ]
+    @property
+    def name(self) -> str:
+        return self._tool.name
 
-        for i, result in enumerate(output.results, 1):
-            lines.append(f"{i}. ID: {result.id} (FTS Rank: {result.score:.4f})")
-            lines.append(f"   Content: {result.content[:200]}...")
-            if result.metadata:
-                entity_type = result.metadata.get("entity_type", "Unknown")
-                lines.append(f"   Entity Type: {entity_type}")
-            lines.append("")
+    @property
+    def description(self) -> str:
+        return self._tool.description
 
-        lines.append("Note: Uses pg_search extension with true BM25 ranking (ParadeDB).")
+    def invoke(self, *args, **kwargs):
+        return self._tool.invoke(*args, **kwargs)
 
-        return "\n".join(lines)
+    def __getattr__(self, name):
+        return getattr(self._tool, name)
