@@ -624,44 +624,10 @@ LangChain create_agent API with PostgresSaver checkpointing enables:
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Citation
-
-If you use this work in your research, please cite:
-
-```bibtex
-@mastersthesis{agrag2025,
-  author = {Berkay Orhan},
-  title = {Agentic GraphRAG for Test Scope Analysis in Telecommunications Software},
-  school = {Linköping University},
-  year = {2025},
-  note = {Master's Thesis, in collaboration with Ericsson},
-  url = {https://github.com/Berkay2002/agentic-rag-test-scope-analysis}
-}
-```
-
-**APA Format**:  
-Orhan, B. (2025). *Agentic GraphRAG for Test Scope Analysis in Telecommunications Software* [Master's thesis, Linköping University]. GitHub. https://github.com/Berkay2002/agentic-rag-test-scope-analysis
+see LICENSE file for details.
 
 ## Acknowledgments
 
-This research was conducted as part of a Master's Thesis program at Linköping University in collaboration with **Ericsson**.
-
-**Special Thanks**:
-- Ericsson Research Team
-- Linköping University Department of Computer Science
-
 ## Support & Contact
 
-This is an academic research project with limited ongoing maintenance.
-
-**For academic questions or research collaboration**:
-- Email: Berkayorhan@hotmail.se
-- Student Email: Beror658@student.liu.se
-- GitHub Discussions: https://github.com/Berkay2002/agentic-rag-test-scope-analysis/discussions
-
-**For bug reports**:
-- GitHub Issues: https://github.com/Berkay2002/agentic-rag-test-scope-analysis/issues
-
-**Note**: This project follows an academic timeline. Response times may vary based on thesis schedule and defense dates.
+This is an academic research project with ongoing maintenance.
