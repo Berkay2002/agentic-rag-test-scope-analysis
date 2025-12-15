@@ -8,7 +8,7 @@
 
 > **Master's Thesis Research Project**  
 > Conducted in collaboration with **Ericsson**  
-> Linköping University, 2024-2025
+> Linköping University, 2026
 
 A research implementation of an agentic Retrieval-Augmented Generation (RAG) system combining Knowledge Graphs, Vector Search, and Human-in-the-Loop workflows for test scope analysis in telecommunications software systems.
 
