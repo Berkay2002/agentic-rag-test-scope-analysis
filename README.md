@@ -23,7 +23,7 @@ This repository contains the implementation for a Master's Thesis. The code is m
 
 ## Overview
 
-This system implements a comprehensive agentic RAG architecture that addresses three key research questions:
+This system implements a comprehensive agentic RAG architecture that aims to address three key research questions:
 
 - **RQ1**: What Knowledge Graph ontology effectively represents software engineering entities and relationships for test scope analysis?
 - **RQ2**: How do different retrieval strategies (vector, keyword, graph, hybrid) compare for test-related queries?
