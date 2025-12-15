@@ -58,7 +58,7 @@ If you have suggestions:
 
 This project involves:
 
-- **Synthetic Data**: All telecommunications data is synthetically generated
+- **Synthetic Data**: All telecommunications data is currently synthetically generated, and only synthetic data will be visible for the public
 - **No Proprietary Information**: No Ericsson proprietary code or data
 - **Academic Standards**: Adheres to university research ethics
 
@@ -86,7 +86,6 @@ For specific inquiries:
 
 ## Timeline
 
-- **Active Development**: January 2025 onwards
-- **Maintenance**: Limited post-defense updates for critical issues
+- **Active Development**: February 2025 onwards
 
 Thank you for your interest in this research!
