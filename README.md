@@ -261,6 +261,10 @@ poetry run agrag evaluate --dataset data/eval_queries.json --strategy vector
 # Evaluate the full agent with dynamic tool selection (RQ2)
 poetry run agrag evaluate --dataset data/eval_queries.json --strategy agent
 
+# Evaluate fixed baselines (RAG vs GraphRAG)
+poetry run agrag evaluate --dataset data/eval_queries.json --strategy rag
+poetry run agrag evaluate --dataset data/eval_queries.json --strategy graphrag
+
 # Evaluate with verbose per-query metrics
 poetry run agrag evaluate --dataset data/eval_queries.json --strategy all --verbose
 ```
@@ -605,11 +609,13 @@ The system implements a domain-specific ontology covering:
 - Vector embeddings for all entities (768-dim)
 
 ### RQ2: Retrieval Strategy Comparison
-Five retrieval strategies implemented and evaluated:
+Seven retrieval strategies implemented and evaluated (including fixed baselines):
 - **Vector Search**: Semantic similarity (PostgreSQL pgvector HNSW)
 - **Keyword Search**: Lexical matching (PostgreSQL pg_search BM25)
 - **Graph Traversal**: Structural relationships (Neo4j Cypher queries)
 - **Hybrid Search**: RRF fusion of vector + keyword (PostgreSQL-native)
+- **Fixed RAG**: Retrieval-only baseline using hybrid search
+- **Fixed GraphRAG**: Hybrid retrieval + graph traversal baseline
 - **Agent**: Dynamic strategy selection via LLM reasoning
 
 The agentic evaluation framework (`AgenticEvaluator`) enables:
