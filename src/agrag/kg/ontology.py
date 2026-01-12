@@ -45,6 +45,9 @@ class TestType(str, Enum):
 class NodeLabel(str, Enum):
     """Neo4j node labels."""
 
+    CHANGE_REQUEST = "ChangeRequest"
+    FILE = "File"
+    COMPONENT = "Component"
     REQUIREMENT = "Requirement"
     TEST_CASE = "TestCase"
     FUNCTION = "Function"
@@ -55,10 +58,12 @@ class NodeLabel(str, Enum):
 class RelationshipType(str, Enum):
     """Neo4j relationship types."""
 
+    TOUCHES = "TOUCHES"  # ChangeRequest -> File
+    PART_OF = "PART_OF"  # File -> Component
     VERIFIES = "VERIFIES"  # TestCase -> Requirement
     COVERS = "COVERS"  # TestCase -> Function
     CALLS = "CALLS"  # Function -> Function
-    DEFINED_IN = "DEFINED_IN"  # Function -> Class
+    DEFINED_IN = "DEFINED_IN"  # Function -> File
     INHERITS_FROM = "INHERITS_FROM"  # Class -> Class
     BELONGS_TO = "BELONGS_TO"  # Class/Function -> Module
     DEPENDS_ON = "DEPENDS_ON"  # Module -> Module
@@ -66,6 +71,38 @@ class RelationshipType(str, Enum):
 
 
 # Entity Models
+
+
+class ChangeRequest(BaseModel):
+    """Change request entity."""
+
+    id: str = Field(..., description="Change request ID (e.g., CR_HANDOVER_001)")
+    title: str = Field(..., description="Short change request title")
+    description: str = Field(..., description="Change request description")
+    status: Optional[str] = Field(None, description="Status (open, in_progress, closed)")
+    embedding: Optional[List[float]] = Field(None, description="Vector embedding")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class File(BaseModel):
+    """File entity."""
+
+    id: str = Field(..., description="File ID (e.g., FILE_src_network_handover_py)")
+    path: str = Field(..., description="File path")
+    language: Optional[str] = Field(None, description="Language")
+    component_id: Optional[str] = Field(None, description="Owning component ID")
+    embedding: Optional[List[float]] = Field(None, description="Vector embedding")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class Component(BaseModel):
+    """Component entity."""
+
+    id: str = Field(..., description="Component ID (e.g., COMP_NETWORK)")
+    name: str = Field(..., description="Component name")
+    description: Optional[str] = Field(None, description="Component description")
+    embedding: Optional[List[float]] = Field(None, description="Vector embedding")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
 class Requirement(BaseModel):
@@ -229,7 +266,7 @@ class CallsRelationship(Relationship):
 
 
 class DefinedInRelationship(Relationship):
-    """Function defined in Class."""
+    """Function defined in File."""
 
     relationship_type: Literal[RelationshipType.DEFINED_IN] = RelationshipType.DEFINED_IN  # type: ignore[assignment]
 
@@ -243,6 +280,9 @@ class InheritsFromRelationship(Relationship):
 # Graph Schema Constants
 
 NEO4J_CONSTRAINTS = [
+    "CREATE CONSTRAINT changerequest_id IF NOT EXISTS FOR (c:ChangeRequest) REQUIRE c.id IS UNIQUE",
+    "CREATE CONSTRAINT file_id IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
+    "CREATE CONSTRAINT component_id IF NOT EXISTS FOR (c:Component) REQUIRE c.id IS UNIQUE",
     "CREATE CONSTRAINT requirement_id IF NOT EXISTS FOR (r:Requirement) REQUIRE r.id IS UNIQUE",
     "CREATE CONSTRAINT testcase_id IF NOT EXISTS FOR (t:TestCase) REQUIRE t.id IS UNIQUE",
     "CREATE CONSTRAINT function_id IF NOT EXISTS FOR (f:Function) REQUIRE f.id IS UNIQUE",
@@ -251,6 +291,30 @@ NEO4J_CONSTRAINTS = [
 ]
 
 NEO4J_VECTOR_INDEXES = [
+    """
+    CREATE VECTOR INDEX change_request_embeddings IF NOT EXISTS
+    FOR (c:ChangeRequest) ON (c.embedding)
+    OPTIONS {indexConfig: {
+        `vector.dimensions`: 768,
+        `vector.similarity_function`: 'cosine'
+    }}
+    """,
+    """
+    CREATE VECTOR INDEX file_embeddings IF NOT EXISTS
+    FOR (f:File) ON (f.embedding)
+    OPTIONS {indexConfig: {
+        `vector.dimensions`: 768,
+        `vector.similarity_function`: 'cosine'
+    }}
+    """,
+    """
+    CREATE VECTOR INDEX component_embeddings IF NOT EXISTS
+    FOR (c:Component) ON (c.embedding)
+    OPTIONS {indexConfig: {
+        `vector.dimensions`: 768,
+        `vector.similarity_function`: 'cosine'
+    }}
+    """,
     """
     CREATE VECTOR INDEX requirement_embeddings IF NOT EXISTS
     FOR (r:Requirement) ON (r.embedding)
