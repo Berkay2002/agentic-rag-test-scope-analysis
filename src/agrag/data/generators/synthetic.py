@@ -8,6 +8,9 @@ from agrag.kg.ontology import (
     Priority,
     RequirementStatus,
     TestType,
+    ChangeRequest,
+    File,
+    Component,
     Requirement,
     TestCase,
     Function,
@@ -358,6 +361,19 @@ class TelecomDataGenerator:
     def _generate_module_id(self, name: str) -> str:
         """Generate a module ID."""
         return f"MOD_{name}"
+
+    def _generate_component_id(self, name: str) -> str:
+        """Generate a component ID."""
+        return f"COMP_{name.upper()}"
+
+    def _generate_file_id(self, path: str) -> str:
+        """Generate a file ID."""
+        slug = path.replace("/", "_").replace(".", "_")
+        return f"FILE_{slug}"
+
+    def _generate_change_request_id(self, category: str, index: int) -> str:
+        """Generate a change request ID."""
+        return f"CR_{category.upper()}_{index:03d}"
 
     def _generate_timestamp(self, days_back: int = 30) -> str:
         """
@@ -827,8 +843,71 @@ class TelecomDataGenerator:
 
         return {"modules": modules, "classes": classes, "functions": functions}
 
+    def generate_components(self) -> List[Dict[str, Any]]:
+        """Generate component entities."""
+        components = []
+        for name in ["network", "core", "utils"]:
+            comp = Component(
+                id=self._generate_component_id(name),
+                name=name,
+                description=f"{name} subsystem",
+                embedding=self.embedding_service.embed_query(f"{name} component"),
+                metadata={"generated": True},
+            )
+            components.append(comp.model_dump())
+        return components
+
+    def generate_files(self, functions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Generate file entities based on function file paths."""
+        files = []
+        seen_paths = set()
+        for func in functions:
+            path = func["file_path"]
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            comp_name = path.split("/")[1] if path.startswith("src/") else "core"
+            file_entity = File(
+                id=self._generate_file_id(path),
+                path=path,
+                language="python",
+                component_id=self._generate_component_id(comp_name),
+                embedding=self.embedding_service.embed_query(path),
+                metadata={"generated": True},
+            )
+            files.append(file_entity.model_dump())
+        return files
+
+    def generate_change_requests(
+        self, files: List[Dict[str, Any]], count: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Generate change request entities."""
+        change_requests = []
+        categories = ["handover", "authentication", "signaling"]
+        for i in range(count):
+            category = random.choice(categories)
+            cr_id = self._generate_change_request_id(category, i + 1)
+            title = f"{category.title()} change request"
+            description = f"Update {category} handling and validate timeout scenarios"
+            cr = ChangeRequest(
+                id=cr_id,
+                title=title,
+                description=description,
+                status=random.choice(["open", "in_progress", "closed"]),
+                embedding=self.embedding_service.embed_query(f"{title} {description}"),
+                metadata={"category": category, "generated": True},
+            )
+            change_requests.append(cr.model_dump())
+        return change_requests
+
     def generate_relationships(
-        self, requirements: List[Dict], test_cases: List[Dict], code_entities: Dict[str, List[Dict]]
+        self,
+        requirements: List[Dict],
+        test_cases: List[Dict],
+        code_entities: Dict[str, List[Dict]],
+        change_requests: List[Dict[str, Any]],
+        files: List[Dict[str, Any]],
+        components: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
         Generate relationships between entities.
@@ -905,20 +984,45 @@ class TelecomDataGenerator:
                     }
                 )
 
-        # DEFINED_IN: Function -> Class
+        # TOUCHES: ChangeRequest -> File
+        for cr in change_requests:
+            if not files:
+                break
+            touched_files = random.sample(files, k=min(2, len(files)))
+            for file in touched_files:
+                relationships.append(
+                    {
+                        "source_id": cr["id"],
+                        "target_id": file["id"],
+                        "relationship_type": "TOUCHES",
+                        "properties": {},
+                    }
+                )
+
+        # DEFINED_IN: Function -> File
         for func in functions:
-            class_name = func["metadata"].get("class")
-            if class_name:
-                class_obj = next((c for c in classes if c["name"] == class_name), None)
-                if class_obj:
-                    relationships.append(
-                        {
-                            "source_id": func["id"],
-                            "target_id": class_obj["id"],
-                            "relationship_type": "DEFINED_IN",
-                            "properties": {},
-                        }
-                    )
+            file_id = self._generate_file_id(func["file_path"])
+            relationships.append(
+                {
+                    "source_id": func["id"],
+                    "target_id": file_id,
+                    "relationship_type": "DEFINED_IN",
+                    "properties": {},
+                }
+            )
+
+        # PART_OF: File -> Component
+        for file in files:
+            comp_id = file.get("component_id")
+            if comp_id:
+                relationships.append(
+                    {
+                        "source_id": file["id"],
+                        "target_id": comp_id,
+                        "relationship_type": "PART_OF",
+                        "properties": {},
+                    }
+                )
 
         # BELONGS_TO: Class -> Module
         for cls in classes:
@@ -980,18 +1084,31 @@ class TelecomDataGenerator:
         requirements = self.generate_requirements(requirement_count)
         test_cases = self.generate_test_cases(testcase_count, requirements)
         code_entities = self.generate_code_entities()
+        components = self.generate_components()
+        files = self.generate_files(code_entities["functions"])
+        change_requests = self.generate_change_requests(files)
 
         # Combine all entities
         all_entities = (
             requirements
             + test_cases
+            + change_requests
+            + files
+            + components
             + code_entities["functions"]
             + code_entities["classes"]
             + code_entities["modules"]
         )
 
         # Generate relationships
-        relationships = self.generate_relationships(requirements, test_cases, code_entities)
+        relationships = self.generate_relationships(
+            requirements,
+            test_cases,
+            code_entities,
+            change_requests,
+            files,
+            components,
+        )
 
         dataset = {
             "entities": all_entities,
@@ -999,6 +1116,9 @@ class TelecomDataGenerator:
             "metadata": {
                 "requirement_count": len(requirements),
                 "testcase_count": len(test_cases),
+                "change_request_count": len(change_requests),
+                "file_count": len(files),
+                "component_count": len(components),
                 "function_count": len(code_entities["functions"]),
                 "class_count": len(code_entities["classes"]),
                 "module_count": len(code_entities["modules"]),
