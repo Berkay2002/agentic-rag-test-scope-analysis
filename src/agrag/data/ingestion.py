@@ -35,6 +35,26 @@ class DataIngestion:
         self.bm25_index_path = bm25_index_path
         logger.info("Data ingestion pipeline initialized")
 
+    @staticmethod
+    def _infer_entity_type(entity_id: str) -> Optional[str]:
+        if entity_id.startswith("CR_"):
+            return "ChangeRequest"
+        if entity_id.startswith("FILE_"):
+            return "File"
+        if entity_id.startswith("COMP_"):
+            return "Component"
+        if entity_id.startswith("REQ_"):
+            return "Requirement"
+        if entity_id.startswith("TC_"):
+            return "TestCase"
+        if entity_id.startswith("FUNC_"):
+            return "Function"
+        if entity_id.startswith("CLASS_"):
+            return "Class"
+        if entity_id.startswith("MOD_"):
+            return "Module"
+        return None
+
     def ingest_entities_neo4j(
         self, entities: List[Dict[str, Any]], entity_type: str, batch_size: int = 100
     ) -> int:
@@ -112,10 +132,12 @@ class DataIngestion:
             # Create content for full-text search
             content_parts = [
                 entity.get("id", ""),
+                entity.get("title", ""),
                 entity.get("name", ""),
                 entity.get("description", ""),
                 entity.get("docstring", ""),
                 entity.get("signature", ""),
+                entity.get("path", ""),
             ]
             content = " ".join(str(p) for p in content_parts if p)
 
@@ -126,7 +148,15 @@ class DataIngestion:
             }
 
             # Add additional metadata fields
-            for key in ["category", "test_type", "priority", "status", "file_path"]:
+            for key in [
+                "category",
+                "test_type",
+                "priority",
+                "status",
+                "file_path",
+                "component_id",
+                "path",
+            ]:
                 if key in entity:
                     metadata[key] = str(entity[key])
 
@@ -240,17 +270,8 @@ class DataIngestion:
         entities_by_type = {}
         for entity in entities:
             # Determine entity type from ID prefix or other fields
-            if entity["id"].startswith("REQ_"):
-                entity_type = "Requirement"
-            elif entity["id"].startswith("TC_"):
-                entity_type = "TestCase"
-            elif entity["id"].startswith("FUNC_"):
-                entity_type = "Function"
-            elif entity["id"].startswith("CLASS_"):
-                entity_type = "Class"
-            elif entity["id"].startswith("MOD_"):
-                entity_type = "Module"
-            else:
+            entity_type = self._infer_entity_type(entity["id"])
+            if not entity_type:
                 logger.warning(f"Unknown entity type for ID: {entity['id']}")
                 continue
 
@@ -342,6 +363,7 @@ class DataIngestion:
             # Build searchable content from multiple fields
             content_parts = [
                 entity.get("id", ""),
+                entity.get("title", ""),
                 entity.get("name", ""),
                 entity.get("description", ""),
                 entity.get("docstring", ""),
@@ -350,6 +372,7 @@ class DataIngestion:
                 entity.get("test_type", ""),
                 entity.get("feature_area", ""),
                 entity.get("sub_feature", ""),
+                entity.get("path", ""),
             ]
 
             # Add tags if present
@@ -376,6 +399,8 @@ class DataIngestion:
                 "priority",
                 "status",
                 "file_path",
+                "component_id",
+                "path",
                 "result",
                 "feature_area",
             ]:

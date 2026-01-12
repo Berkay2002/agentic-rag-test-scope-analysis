@@ -66,9 +66,11 @@ class DualStorageWriter:
             # Build content for full-text search
             content_parts = [
                 entity.get("id", ""),
+                entity.get("title", ""),
                 entity.get("name", ""),
                 entity.get("description", ""),
                 entity.get("docstring", ""),
+                entity.get("path", ""),
             ]
             content = " ".join(str(p) for p in content_parts if p)
 
@@ -77,6 +79,9 @@ class DualStorageWriter:
                 "entity_type": entity_type,
                 "entity_id": entity["id"],
                 "file_path": entity.get("file_path"),
+                "path": entity.get("path"),
+                "component_id": entity.get("component_id"),
+                "status": entity.get("status"),
                 "line_start": entity.get("line_start"),
                 "line_end": entity.get("line_end"),
             }
@@ -104,10 +109,12 @@ class DualStorageWriter:
             # Build text content for BM25
             content_parts = [
                 entity.get("id", ""),
+                entity.get("title", ""),
                 entity.get("name", ""),
                 entity.get("description", ""),
                 entity.get("docstring", ""),
                 entity.get("signature", ""),
+                entity.get("path", ""),
             ]
             content = " ".join(str(p) for p in content_parts if p)
 
@@ -116,6 +123,9 @@ class DualStorageWriter:
                 "entity_type": entity_type,
                 "entity_id": entity["id"],
                 "source": entity.get("file_path", "unknown"),
+                "path": entity.get("path"),
+                "component_id": entity.get("component_id"),
+                "status": entity.get("status"),
             }
 
             # Add to BM25 retriever
