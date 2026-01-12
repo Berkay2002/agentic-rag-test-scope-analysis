@@ -84,4 +84,5 @@ python_functions = "test_*"
 filterwarnings = [
     "ignore:.*asyncio\\.iscoroutinefunction.*:DeprecationWarning:neo4j.*",
     "ignore:Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.*:UserWarning:langchain_core.*",
+    "ignore:.*_UnionGenericAlias.*:DeprecationWarning:google\\.genai.*",
 ]
