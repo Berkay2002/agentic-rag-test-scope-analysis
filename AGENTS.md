@@ -99,6 +99,16 @@ src/agrag/
 └── observability/    # LangSmith utilities
 ```
 
+### Repo-Local Codex Skills
+
+This repo keeps lightweight, agent-consumable “skills” under `.codex/skills/` (each skill is a folder
+containing a `SKILL.md`, and optionally `references/`, `assets/`, and `scripts/`).
+
+- When working in `src/`, prefer consulting the most relevant skill(s) first (e.g., Neo4j/Cypher,
+  hybrid retrieval, evaluation) and follow their checklists/patterns.
+- Keep project guidance in `README.md`, `AGENTS.md`, and `.codex/skills/` (the legacy `docs/` folder
+  is intentionally not used anymore).
+
 ### Running the Agent
 
 ```bash
