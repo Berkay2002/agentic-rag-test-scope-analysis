@@ -10,7 +10,7 @@ from langchain_core.documents import Document as LCDocument
 from agrag.storage.neo4j_client import Neo4jClient
 from agrag.storage.postgres_client import PostgresClient
 from agrag.storage.bm25_retriever import BM25RetrieverManager
-from agrag.data.dual_storage_writer import PostgresWriter, BM25Writer
+from agrag.data.storage_writers import PostgresWriter, BM25Writer
 from agrag.models.embeddings import get_embedding_service
 from agrag.kg.ontology import RelationshipType
 

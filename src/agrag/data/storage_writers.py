@@ -3,7 +3,6 @@
 from typing import Dict, Any, List, Optional
 import json
 import logging
-import warnings
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -243,85 +242,3 @@ class BM25Writer:
             logger.info("BM25 index saved to %s", path)
         except Exception as e:
             logger.error("Failed to save BM25 index: %s", e)
-
-
-class DualStorageWriter:
-    """Deprecated: use PostgresWriter/BM25Writer/GraphWriter explicitly."""
-
-    def __init__(self, enable_graph: bool = True, bm25_index_path: str = "data/bm25_index.pkl"):
-        warnings.warn(
-            "DualStorageWriter is deprecated; use PostgresWriter, GraphWriter, and BM25Writer",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.postgres_writer = PostgresWriter()
-        self.graph_writer = GraphWriter() if enable_graph else None
-        self.bm25_writer = BM25Writer(index_path=bm25_index_path)
-
-        self.stats = {
-            "neo4j_writes": 0,
-            "postgres_writes": 0,
-            "bm25_writes": 0,
-            "failures": 0,
-        }
-
-    def write_entity(
-        self,
-        entity: Dict[str, Any],
-        entity_type: str,
-        skip_on_partial_failure: bool = False,
-    ) -> Dict[str, bool]:
-        results = {"neo4j": False, "postgres": False, "bm25": False}
-
-        try:
-            if self.graph_writer:
-                results["neo4j"] = self.graph_writer.write_entity(entity, entity_type)
-                if results["neo4j"]:
-                    self.stats["neo4j_writes"] += 1
-            results["postgres"] = self.postgres_writer.write_entity(entity, entity_type)
-            if results["postgres"]:
-                self.stats["postgres_writes"] += 1
-            results["bm25"] = self.bm25_writer.write_entity(entity, entity_type)
-            if results["bm25"]:
-                self.stats["bm25_writes"] += 1
-
-            if not all(results.values()) and not skip_on_partial_failure:
-                self.stats["failures"] += 1
-                raise RuntimeError(f"Partial write failure: {results}")
-
-            return results
-        except Exception as e:
-            logger.error("Write failed for %s: %s", entity.get("id"), e)
-            self.stats["failures"] += 1
-            if not skip_on_partial_failure:
-                raise
-            return results
-
-    def write_entities_batch(
-        self,
-        entities: List[Dict[str, Any]],
-        entity_type: str,
-        batch_size: int = 100,
-    ) -> Dict[str, int]:
-        total = len(entities)
-        success_count = {"neo4j": 0, "postgres": 0, "bm25": 0}
-
-        logger.info("Writing %d %s entities to dual storage...", total, entity_type)
-
-        for i, entity in enumerate(entities, 1):
-            results = self.write_entity(entity, entity_type, skip_on_partial_failure=True)
-            for store, succeeded in results.items():
-                if succeeded:
-                    success_count[store] += 1
-
-            if i % batch_size == 0:
-                logger.info("Progress: %d/%d entities written", i, total)
-
-        logger.info("Batch write complete: %s", success_count)
-        return success_count
-
-    def persist_bm25_index(self, file_path: str = "data/bm25_index.pkl") -> None:
-        self.bm25_writer.persist_index(file_path)
-
-    def get_statistics(self) -> Dict[str, int]:
-        return self.stats.copy()
