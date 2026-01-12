@@ -775,4 +775,8 @@ git commit -m "feat: add fixed rag and graphrag baselines"
 - Completed Task 1 (v1 ontology entities/relationships + constraints/indexes). Commit: e2b6be9
 - Completed Task 2 (v1 entity ID extraction patterns). Commit: 1e6c78c
 - Completed Task 3 (v1 entities + relationships in synthetic generator). Commit: 9ca8b07
-- Validation: `poetry run pytest tests/unit/test_ontology_v1.py tests/unit/test_entity_extractor.py tests/unit/test_synthetic_generator_v1.py -q`, `poetry run ruff check src/ tests/`
+- Completed Task 4 (v1 evaluation query workloads). Commit: aa35643
+- Completed Task 5 (v1 ingestion mapping + metadata). Commit: 9f42b01
+- Completed Task 6 (agent prompt + CLI parsing updates). Commit: aa3afa7
+- Completed Task 7 (fixed RAG + GraphRAG baselines). Commit: 7be436f
+- Validation: `poetry run pytest tests/unit/test_ontology_v1.py tests/unit/test_entity_extractor.py tests/unit/test_synthetic_generator_v1.py tests/unit/test_evaluation_queries_v1.py tests/unit/test_ingestion_mapping.py tests/unit/test_cli_parsing_v1.py tests/unit/test_fixed_baselines.py -q`, `poetry run ruff check src/ tests/`
