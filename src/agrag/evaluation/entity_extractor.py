@@ -19,6 +19,9 @@ ENTITY_PATTERNS = {
     "Function": r"FUNC_[A-Za-z_]+(?:_\d+)?",
     "Class": r"CLASS_[A-Za-z_]+(?:_\d+)?",
     "Module": r"MOD_[A-Za-z_.]+(?:_\d+)?",
+    "ChangeRequest": r"CR_[A-Z]+_\d+",
+    "File": r"FILE_[A-Za-z0-9_]+",
+    "Component": r"COMP_[A-Za-z0-9_]+",
 }
 
 # Compiled patterns for efficiency
