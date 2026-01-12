@@ -47,3 +47,6 @@ jobs:
     
     - name: Lint with Ruff
       run: poetry run ruff check src/ tests/
+
+    - name: Validate Codex skills
+      run: python scripts/validate_skills.py
