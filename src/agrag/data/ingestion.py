@@ -10,7 +10,7 @@ from langchain_core.documents import Document as LCDocument
 from agrag.storage.neo4j_client import Neo4jClient
 from agrag.storage.postgres_client import PostgresClient
 from agrag.storage.bm25_retriever import BM25RetrieverManager
-from agrag.data.dual_storage_writer import DualStorageWriter
+from agrag.data.dual_storage_writer import PostgresWriter, BM25Writer
 from agrag.models.embeddings import get_embedding_service
 from agrag.kg.ontology import RelationshipType
 
@@ -447,8 +447,8 @@ class DataIngestion:
         # Convert documents to entities
         entities = self._documents_to_entities(documents)
 
-        # Use dual storage writer
-        writer = DualStorageWriter()
+        postgres_writer = PostgresWriter()
+        bm25_writer = BM25Writer()
 
         # Group entities by type
         entities_by_type = {}
@@ -458,15 +458,16 @@ class DataIngestion:
                 entities_by_type[entity_type] = []
             entities_by_type[entity_type].append(entity)
 
-        # Ingest each type
+        # Ingest each type into PostgreSQL + BM25 only
         total_counts = {"neo4j": 0, "postgres": 0, "bm25": 0}
         for entity_type, type_entities in entities_by_type.items():
-            counts = writer.write_entities_batch(type_entities, entity_type)
-            for key in total_counts:
-                total_counts[key] += counts[key]
+            total_counts["postgres"] += postgres_writer.write_entities_batch(
+                type_entities, entity_type
+            )
+            total_counts["bm25"] += bm25_writer.write_entities_batch(type_entities, entity_type)
 
         # Persist BM25 index
-        writer.persist_bm25_index()
+        bm25_writer.persist_index()
 
         logger.info(f"Repository ingestion complete: {total_counts}")
         return total_counts
@@ -511,13 +512,16 @@ class DataIngestion:
         # Convert documents to requirement entities
         entities = self._documents_to_requirements(documents)
 
-        # Use dual storage writer
-        writer = DualStorageWriter()
-        counts = writer.write_entities_batch(entities, "Requirement")
+        postgres_writer = PostgresWriter()
+        bm25_writer = BM25Writer()
+
+        postgres_count = postgres_writer.write_entities_batch(entities, "Requirement")
+        bm25_count = bm25_writer.write_entities_batch(entities, "Requirement")
 
         # Persist BM25 index
-        writer.persist_bm25_index()
+        bm25_writer.persist_index()
 
+        counts = {"neo4j": 0, "postgres": postgres_count, "bm25": bm25_count}
         logger.info(f"Document ingestion complete: {counts}")
         return counts
 
