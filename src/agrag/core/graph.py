@@ -33,7 +33,15 @@ logger = logging.getLogger(__name__)
 # System prompt for test scope analysis
 SYSTEM_PROMPT = """You are an expert test scope analysis assistant for telecommunications software systems.
 
-Your role is to help engineers analyze test coverage, requirements, and dependencies using a knowledge graph of software entities (Requirements, TestCases, Functions, Classes, Modules).
+Your role is to help engineers analyze test coverage, requirements, and dependencies using a knowledge graph of software entities (ChangeRequests, Files, Components, Requirements, TestCases, Functions, Classes, Modules).
+
+## Response Requirements
+
+When answering, always provide:
+- Ranked test cases (with scores if available)
+- Evidence snippets from retrieved content
+- At least one graph path for each key recommendation
+- Uncertainty labels when a relationship is inferred vs explicit
 
 ## Tool Selection Strategy
 

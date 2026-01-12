@@ -15,7 +15,11 @@ class VectorSearchInput(BaseModel):
     query: str = Field(
         ...,
         description="Natural language query for semantic search",
-        examples=["tests related to handover failures", "authentication requirements"],
+        examples=[
+            "tests related to handover failures",
+            "authentication requirements",
+            "change request handover updates",
+        ],
     )
     k: int = Field(
         default=10,
@@ -61,7 +65,14 @@ class GraphTraverseInput(BaseModel):
     start_node_id: str = Field(
         ...,
         description="ID of the starting node for traversal",
-        examples=["TC_HANDOVER_001", "REQ_AUTH_005", "FUNC_initiate_handover"],
+        examples=[
+            "TC_HANDOVER_001",
+            "REQ_AUTH_005",
+            "FUNC_initiate_handover",
+            "CR_HANDOVER_001",
+            "FILE_src_network_handover_py",
+            "COMP_NETWORK",
+        ],
     )
     start_node_label: NodeLabel = Field(
         ...,
@@ -93,6 +104,7 @@ class HybridSearchInput(BaseModel):
         examples=[
             "tests for LTE signaling with timeout errors",
             "handover functions in network module",
+            "impact analysis for FILE_src_network_handover_py",
         ],
     )
     k: int = Field(

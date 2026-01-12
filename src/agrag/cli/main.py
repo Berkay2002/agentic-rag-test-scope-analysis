@@ -599,6 +599,9 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
     # Extract entity ID from query
     # Match patterns like REQ_AUTH_005, FUNC_initiate_handover, etc.
     id_patterns = [
+        (r"CR_[A-Z]+_\d+", NodeLabel.CHANGE_REQUEST),
+        (r"FILE_[A-Za-z0-9_]+", NodeLabel.FILE),
+        (r"COMP_[A-Za-z0-9_]+", NodeLabel.COMPONENT),
         (r"REQ_[A-Z]+_\d+", NodeLabel.REQUIREMENT),
         (r"FUNC_[A-Za-z_]+", NodeLabel.FUNCTION),
         (r"CLASS_[A-Za-z_]+", NodeLabel.CLASS),
@@ -638,6 +641,19 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
         # Find tests for code in this module
         relationship_types = [RelationshipType.DEFINED_IN, RelationshipType.COVERS]
         direction = "incoming"
+    elif start_node_label in [
+        NodeLabel.CHANGE_REQUEST,
+        NodeLabel.FILE,
+        NodeLabel.COMPONENT,
+    ]:
+        relationship_types = [
+            RelationshipType.TOUCHES,
+            RelationshipType.DEFINED_IN,
+            RelationshipType.COVERS,
+            RelationshipType.VERIFIES,
+            RelationshipType.PART_OF,
+        ]
+        direction = "both"
     else:
         # Default: find any connected test cases
         relationship_types = None
@@ -689,6 +705,9 @@ def _parse_graph_result_ids(result_str: str) -> list:
         (r"Function:(FUNC_[A-Za-z_]+)", False),  # Functions
         (r"Class:(CLASS_[A-Za-z_]+)", False),  # Classes
         (r"Module:(MOD_[A-Za-z_.]+)", False),  # Modules
+        (r"ChangeRequest:(CR_[A-Z]+_\d+)", False),  # Change requests
+        (r"File:(FILE_[A-Za-z0-9_]+)", False),  # Files
+        (r"Component:(COMP_[A-Za-z0-9_]+)", False),  # Components
     ]
 
     for pattern, is_test_case in patterns:
@@ -732,6 +751,9 @@ def _parse_result_ids(result_str: str) -> list:
     # - FUNC_something_001 (functions)
     # Also handle prefixed versions like TestCase_TC_HANDOVER_001
     patterns = [
+        r"ID:\s*(?:ChangeRequest_)?(CR_[A-Z]+_\d+)",  # Change requests
+        r"ID:\s*(?:File_)?(FILE_[A-Za-z0-9_]+)",  # Files
+        r"ID:\s*(?:Component_)?(COMP_[A-Za-z0-9_]+)",  # Components
         r"ID:\s*(?:TestCase_)?(TC_[A-Z]+_\d+)",  # Test cases
         r"ID:\s*(?:Requirement_)?(REQ_[A-Z]+_\d+)",  # Requirements
         r"ID:\s*(?:Function_)?(FUNC_[A-Za-z_]+)",  # Functions
