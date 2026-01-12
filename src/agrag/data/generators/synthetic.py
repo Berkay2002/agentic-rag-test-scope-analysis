@@ -243,6 +243,22 @@ QUERY_PARAPHRASES = {
         "List all {test_type} tests",
         "{test_type} tests in the system",
     ],
+    "change_request_tests": [
+        "Tests impacted by change request {cr_id}",
+        "What tests are related to {cr_id}?",
+    ],
+    "coverage_by_component": [
+        "Coverage for {req_id} by component",
+        "Which components cover requirement {req_id}?",
+    ],
+    "impact_analysis": [
+        "Impact analysis for {file_id}",
+        "Tests impacted by changes in {file_id}",
+    ],
+    "failure_triage": [
+        "Tests related to error {error_code}",
+        "Which tests cover failures with {error_code}?",
+    ],
 }
 
 NEGATIVE_QUERIES = [
@@ -1168,6 +1184,9 @@ class TelecomDataGenerator:
         # Build lookup structures
         req_to_tests = self._build_requirement_to_tests_map(relationships)
         func_to_tests = self._build_function_to_tests_map(relationships)
+        cr_to_files = self._build_cr_to_files_map(relationships)
+        file_to_funcs = self._build_file_to_functions_map(relationships)
+        file_to_component = self._build_file_to_component_map(relationships)
         test_lookup = {t["id"]: t for t in test_cases}
         func_lookup = {f["id"]: f for f in functions}
 
@@ -1278,6 +1297,29 @@ class TelecomDataGenerator:
         # =========================================================================
         moderate_queries = []
 
+        # 1. Change request tests - "Tests impacted by change request CR_XXX"
+        for cr_id, file_ids in list(cr_to_files.items())[:5]:
+            test_ids = set()
+            for file_id in file_ids:
+                for func_id in file_to_funcs.get(file_id, []):
+                    test_ids.update(func_to_tests.get(func_id, []))
+            if test_ids:
+                paraphrases = QUERY_PARAPHRASES["change_request_tests"]
+                query_text = (
+                    random.choice(paraphrases).format(cr_id=cr_id)
+                    if use_paraphrases
+                    else f"Tests impacted by change request {cr_id}"
+                )
+                q = self._create_query(
+                    query_id,
+                    query_text,
+                    list(test_ids),
+                    QueryDifficulty.MODERATE,
+                    "change_request_tests",
+                )
+                moderate_queries.append(q)
+                query_id += 1
+
         # 1. Requirement coverage - "What tests verify REQ_XXX?"
         for req_id, test_ids in list(req_to_tests.items())[:8]:
             if test_ids:
@@ -1319,7 +1361,29 @@ class TelecomDataGenerator:
                 moderate_queries.append(q)
                 query_id += 1
 
-        # 3. Suite membership
+        # 3. Impact analysis - "Tests impacted by changes in FILE_XXX"
+        for file_id, func_ids in list(file_to_funcs.items())[:5]:
+            impacted = set()
+            for func_id in func_ids:
+                impacted.update(func_to_tests.get(func_id, []))
+            if impacted:
+                paraphrases = QUERY_PARAPHRASES["impact_analysis"]
+                query_text = (
+                    random.choice(paraphrases).format(file_id=file_id)
+                    if use_paraphrases
+                    else f"Impact analysis for {file_id}"
+                )
+                q = self._create_query(
+                    query_id,
+                    query_text,
+                    list(impacted),
+                    QueryDifficulty.MODERATE,
+                    "impact_analysis",
+                )
+                moderate_queries.append(q)
+                query_id += 1
+
+        # 4. Suite membership
         for suite, test_ids in list(tests_by_suite.items())[:4]:
             paraphrases = QUERY_PARAPHRASES["find_tests_in_suite"]
             query_text = (
@@ -1333,7 +1397,7 @@ class TelecomDataGenerator:
             moderate_queries.append(q)
             query_id += 1
 
-        # 4. Combined filters - "Failed tests in Authentication feature"
+        # 5. Combined filters - "Failed tests in Authentication feature"
         for feature in ["Handover", "Authentication", "Security"]:
             if feature in tests_by_feature:
                 failed_in_feature = [
@@ -1352,7 +1416,7 @@ class TelecomDataGenerator:
                     moderate_queries.append(q)
                     query_id += 1
 
-        # 5. Tag-based queries
+        # 6. Tag-based queries
         tagged_tests = self._find_tests_with_tag(test_cases, "regression")
         if tagged_tests:
             q = self._create_query(
@@ -1365,6 +1429,32 @@ class TelecomDataGenerator:
             moderate_queries.append(q)
             query_id += 1
 
+        # 7. Failure triage - "Tests related to error ERR_XXXX"
+        error_tests = [t for t in test_cases if t.get("metadata", {}).get("failure_reason")]
+        if not error_tests and test_cases:
+            error_tests = [test_cases[0]]
+        for test in error_tests[:5]:
+            reason = test.get("metadata", {}).get("failure_reason", "")
+            if "ERR_" in reason:
+                error_code = "ERR_" + reason.split("ERR_")[-1].split()[0]
+            else:
+                error_code = "ERR_1000"
+            paraphrases = QUERY_PARAPHRASES["failure_triage"]
+            query_text = (
+                random.choice(paraphrases).format(error_code=error_code)
+                if use_paraphrases
+                else f"Tests related to error {error_code}"
+            )
+            q = self._create_query(
+                query_id,
+                query_text,
+                [test["id"]],
+                QueryDifficulty.MODERATE,
+                "failure_triage",
+            )
+            moderate_queries.append(q)
+            query_id += 1
+
         queries.extend(moderate_queries[:num_moderate])
 
         # =========================================================================
@@ -1372,7 +1462,35 @@ class TelecomDataGenerator:
         # =========================================================================
         complex_queries = []
 
-        # 1. Multi-hop traversal - "Tests for functions in class X"
+        # 1. Coverage by component - "Which components cover requirement REQ_XXX?"
+        for req_id, test_ids in list(req_to_tests.items())[:5]:
+            components = set()
+            for rel in relationships:
+                if rel["relationship_type"] == "COVERS" and rel["source_id"] in test_ids:
+                    func_id = rel["target_id"]
+                    for file_id in file_to_funcs:
+                        if func_id in file_to_funcs.get(file_id, []):
+                            comp_id = file_to_component.get(file_id)
+                            if comp_id:
+                                components.add(comp_id)
+            if components:
+                paraphrases = QUERY_PARAPHRASES["coverage_by_component"]
+                query_text = (
+                    random.choice(paraphrases).format(req_id=req_id)
+                    if use_paraphrases
+                    else f"Coverage for {req_id} by component"
+                )
+                q = self._create_query(
+                    query_id,
+                    query_text,
+                    list(components),
+                    QueryDifficulty.COMPLEX,
+                    "coverage_by_component",
+                )
+                complex_queries.append(q)
+                query_id += 1
+
+        # 2. Multi-hop traversal - "Tests for functions in class X"
         # Find classes and their functions, then tests covering those functions
         class_to_funcs = self._build_class_to_functions_map(relationships)
         for class_id, func_ids in list(class_to_funcs.items())[:3]:
@@ -1392,7 +1510,7 @@ class TelecomDataGenerator:
                 complex_queries.append(q)
                 query_id += 1
 
-        # 2. Aggregation-style queries (feature areas with failing tests)
+        # 3. Aggregation-style queries (feature areas with failing tests)
         features_with_failures = []
         for feature, test_ids in tests_by_feature.items():
             failed_count = sum(
@@ -1423,7 +1541,7 @@ class TelecomDataGenerator:
             complex_queries.append(q)
             query_id += 1
 
-        # 3. Coverage gaps - "Requirements with no test coverage"
+        # 4. Coverage gaps - "Requirements with no test coverage"
         uncovered_reqs = [
             r["id"]
             for r in requirements
@@ -1441,7 +1559,7 @@ class TelecomDataGenerator:
             complex_queries.append(q)
             query_id += 1
 
-        # 4. Cross-entity queries - "Functions covered by failed authentication tests"
+        # 5. Cross-entity queries - "Functions covered by failed authentication tests"
         if "Authentication" in tests_by_feature:
             failed_auth_tests = [
                 tid
@@ -1468,7 +1586,7 @@ class TelecomDataGenerator:
                     complex_queries.append(q)
                     query_id += 1
 
-        # 5. Critical failed tests
+        # 6. Critical failed tests
         critical_failed = [
             t["id"]
             for t in test_cases
@@ -1486,7 +1604,7 @@ class TelecomDataGenerator:
             complex_queries.append(q)
             query_id += 1
 
-        # 6. High coverage tests with errors
+        # 7. High coverage tests with errors
         error_tests_high_coverage = [
             t["id"]
             for t in test_cases
@@ -1599,9 +1717,45 @@ class TelecomDataGenerator:
             if rel["relationship_type"] == "DEFINED_IN":
                 func_id = rel["source_id"]
                 class_id = rel["target_id"]
+                if not class_id.startswith("CLASS_"):
+                    continue
                 if class_id not in mapping:
                     mapping[class_id] = []
                 mapping[class_id].append(func_id)
+        return mapping
+
+    def _build_cr_to_files_map(self, relationships: List[Dict]) -> Dict[str, List[str]]:
+        """Build mapping from change request ID to list of file IDs it touches."""
+        mapping = {}
+        for rel in relationships:
+            if rel["relationship_type"] == "TOUCHES":
+                cr_id = rel["source_id"]
+                file_id = rel["target_id"]
+                if cr_id not in mapping:
+                    mapping[cr_id] = []
+                mapping[cr_id].append(file_id)
+        return mapping
+
+    def _build_file_to_functions_map(self, relationships: List[Dict]) -> Dict[str, List[str]]:
+        """Build mapping from file ID to list of function IDs defined in it."""
+        mapping = {}
+        for rel in relationships:
+            if rel["relationship_type"] == "DEFINED_IN":
+                func_id = rel["source_id"]
+                file_id = rel["target_id"]
+                if file_id not in mapping:
+                    mapping[file_id] = []
+                mapping[file_id].append(func_id)
+        return mapping
+
+    def _build_file_to_component_map(self, relationships: List[Dict]) -> Dict[str, str]:
+        """Build mapping from file ID to owning component ID."""
+        mapping = {}
+        for rel in relationships:
+            if rel["relationship_type"] == "PART_OF":
+                file_id = rel["source_id"]
+                comp_id = rel["target_id"]
+                mapping[file_id] = comp_id
         return mapping
 
     def _group_tests_by_attribute(self, test_cases: List[Dict], attr: str) -> Dict[str, List[str]]:
