@@ -12,7 +12,7 @@ This is an **Agentic GraphRAG system** for test scope analysis in telecommunicat
 - **Observability**: LangSmith (full tracing)
 - **Package Manager**: Poetry
 
-**Architecture**: Custom ReAct agent with 4 retrieval tools operating on a dual-database architecture:
+**Architecture**: Custom ReAct agent with 4 retrieval tools operating on a dual-database architecture (PostgreSQL for retrieval, Neo4j for explicit graph materialization and traversal):
 - **Neo4j**: Knowledge graph for entity relationships and graph traversal
 - **PostgreSQL/Neon**: All retrieval (pgvector for semantic search, pg_search for BM25 keyword search, RRF hybrid fusion)
 
@@ -255,7 +255,7 @@ poetry run pytest tests/integration/
 2. **Metric Calculations**: Verify Precision@k, Recall@k, MAP, MRR implementations
 3. **Ontology Validation**: Ensure entity/relationship schemas are consistent
 4. **Agent Workflow**: Test StateGraph execution with checkpointing
-5. **Data Ingestion**: Validate dual-database writes
+5. **Data Ingestion**: Validate Postgres/BM25 writes and explicit Neo4j graph writes
 
 ### Before Committing
 
@@ -325,6 +325,7 @@ from agrag.tools.schemas import VectorSearchInput
 - Use connection pooling (built into drivers)
 - Always close connections in context managers or destructors
 - Use parameterized queries (never string interpolation)
+- Use `storage_writers` for ingestion (`PostgresWriter`/`BM25Writer` default, `GraphWriter` only when graph edges are intended)
 
 #### Tool Implementation
 - Inherit from `BaseTool` (LangChain)
@@ -339,29 +340,38 @@ from agrag.tools.schemas import VectorSearchInput
 
 **Core entities** (defined in `src/agrag/kg/ontology.py`):
 
-1. **Requirement** - System requirements
+1. **ChangeRequest** - Change requests
+   - Properties: `id`, `title`, `description`, `status`, `embedding`
+
+2. **File** - Code files
+   - Properties: `id`, `path`, `language`, `component_id`, `embedding`
+
+3. **Component** - Subsystems/modules
+   - Properties: `id`, `name`, `description`, `embedding`
+
+4. **Requirement** - System requirements
    - Properties: `id`, `priority`, `status`, `description`, `embedding`
    
-2. **TestCase** - Test cases
+5. **TestCase** - Test cases
    - Properties: `id`, `test_type`, `file_path`, `expected_outcome`, `embedding`
    
-3. **Function** - Code functions
+6. **Function** - Code functions
    - Properties: `id`, `signature`, `code_snippet`, `file_path`, `line_number`, `embedding`
    
-4. **Class** - Code classes
+7. **Class** - Code classes (legacy optional)
    - Properties: `id`, `name`, `methods`, `file_path`, `embedding`
    
-5. **Module** - Code modules/packages
+8. **Module** - Code modules/packages (legacy optional)
    - Properties: `id`, `name`, `architectural_component`, `embedding`
 
 ### Relationship Types
 
-1. `VERIFIES` - TestCase → Requirement (test validates requirement)
-2. `COVERS` - TestCase → Function/Class (test exercises code)
-3. `CALLS` - Function → Function (function invocation)
-4. `DEFINED_IN` - Function/Class → Module (code location)
-5. `BELONGS_TO` - Class → Module (class membership)
-6. `DEPENDS_ON` - Requirement → Requirement (requirement dependency)
+1. `TOUCHES` - ChangeRequest → File (change impacts file)
+2. `DEFINED_IN` - Function → File (function location)
+3. `PART_OF` - File → Component (ownership)
+4. `COVERS` - TestCase → Function (test exercises code)
+5. `VERIFIES` - TestCase → Requirement (test validates requirement)
+6. Legacy optional: `CALLS`, `INHERITS_FROM`, `BELONGS_TO`, `DEPENDS_ON`, `TESTS`
 
 ### Working with the Ontology
 

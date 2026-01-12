@@ -59,7 +59,7 @@ This system implements a comprehensive agentic RAG architecture that aims to add
   - Parses TGF CSV format with test metadata
   - Maps to TestCase entities with relationships
   - Validates and normalizes test results and types
-- **Dual Storage Writer**: Coordinated writes to Neo4j + PostgreSQL + BM25
+- **Storage Writers**: Modular writers for PostgreSQL/BM25 (default) and Neo4j (explicit graph materialization)
   - Retry logic with exponential backoff
   - Idempotent upserts for reliability
 
@@ -464,7 +464,7 @@ src/agrag/
 │   │       ├── code_splitter.py     # AST-based
 │   │       ├── markdown_splitter.py # Header-based
 │   │       └── semantic_splitter.py # Embeddings-based
-│   ├── dual_storage_writer.py # Coordinated DB writes
+│   ├── storage_writers.py # Postgres/BM25/Neo4j writers
 │   └── ingestion.py  # Data ingestion pipeline
 ├── evaluation/       # Evaluation framework
 │   ├── metrics.py    # P@k, R@k, MAP, MRR calculations
@@ -572,21 +572,27 @@ for tc in test_cases:
 
 ### Database Management
 
-#### Dual Storage Writes
+#### Storage Writes
 ```python
-from agrag.data.dual_storage_writer import DualStorageWriter
+from agrag.data.storage_writers import PostgresWriter, BM25Writer, GraphWriter
 
-writer = DualStorageWriter()
+postgres_writer = PostgresWriter()
+bm25_writer = BM25Writer()
 
-# Write entities to Neo4j + PostgreSQL + BM25
-stats = writer.write_entities_batch(
-    entities=my_entities,
-    entity_type="Requirement",
-    batch_size=100
+# Write entities to PostgreSQL + BM25
+postgres_count = postgres_writer.write_entities_batch(
+    entities=my_entities, entity_type="Requirement", batch_size=100
+)
+bm25_count = bm25_writer.write_entities_batch(
+    entities=my_entities, entity_type="Requirement", batch_size=100
 )
 
 # Persist BM25 index
-writer.persist_bm25_index("data/bm25_index.pkl")
+bm25_writer.persist_index("data/bm25_index.pkl")
+
+# Optional: materialize graph entities explicitly
+# graph_writer = GraphWriter()
+# graph_writer.write_entities_batch(entities=my_entities, entity_type="Requirement")
 ```
 
 ## Research Questions
