@@ -767,3 +767,12 @@ Expected: PASS
 git add src/agrag/evaluation/fixed_baselines.py src/agrag/cli/main.py tests/unit/test_fixed_baselines.py
 git commit -m "feat: add fixed rag and graphrag baselines"
 ```
+
+---
+
+## Progress
+
+- Completed Task 1 (v1 ontology entities/relationships + constraints/indexes). Commit: e2b6be9
+- Completed Task 2 (v1 entity ID extraction patterns). Commit: 1e6c78c
+- Completed Task 3 (v1 entities + relationships in synthetic generator). Commit: 9ca8b07
+- Validation: `poetry run pytest tests/unit/test_ontology_v1.py tests/unit/test_entity_extractor.py tests/unit/test_synthetic_generator_v1.py -q`, `poetry run ruff check src/ tests/`
