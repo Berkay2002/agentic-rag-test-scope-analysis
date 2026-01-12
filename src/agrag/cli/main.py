@@ -299,7 +299,7 @@ def query(
 )
 @click.option(
     "--strategy",
-    type=click.Choice(["vector", "keyword", "hybrid", "graph", "agent", "all"]),
+    type=click.Choice(["vector", "keyword", "hybrid", "graph", "rag", "graphrag", "agent", "all"]),
     default="all",
     help="Retrieval strategy to evaluate (default: all)",
 )
@@ -327,6 +327,8 @@ def evaluate(
       - keyword: BM25 keyword search (requires populated index)
       - hybrid: Vector + BM25 fusion with RRF
       - graph: Graph traversal for structural queries
+      - rag: Fixed retrieval-only baseline (hybrid search)
+      - graphrag: Fixed retrieval + graph traversal baseline
       - agent: Full LLM agent with dynamic tool selection (RQ2)
       - all: Compare all strategies side-by-side
 
@@ -356,6 +358,7 @@ def evaluate(
         mean_average_precision,
         mean_reciprocal_rank,
     )
+    from agrag.evaluation.fixed_baselines import run_fixed_graphrag, run_fixed_rag
     from agrag.tools import VectorSearchTool, KeywordSearchTool, HybridSearchTool, GraphTraverseTool
     from agrag.storage import Neo4jClient, PostgresClient, BM25RetrieverManager
 
@@ -408,12 +411,22 @@ def evaluate(
             tools["vector"] = VectorSearchTool(postgres_client=postgres_client)
         if strategy in ["keyword", "all"]:
             tools["keyword"] = KeywordSearchTool(postgres_client=postgres_client)
-        if strategy in ["hybrid", "all"]:
-            tools["hybrid"] = HybridSearchTool(
-                postgres_client=postgres_client,
-            )
-        if strategy in ["graph", "all"]:
-            tools["graph"] = GraphTraverseTool(neo4j_client=neo4j_client)
+        hybrid_tool = None
+        graph_tool = None
+
+        if strategy in ["hybrid", "rag", "graphrag", "all"]:
+            hybrid_tool = HybridSearchTool(postgres_client=postgres_client)
+        if strategy in ["graph", "graphrag", "all"]:
+            graph_tool = GraphTraverseTool(neo4j_client=neo4j_client)
+
+        if strategy in ["hybrid", "all"] and hybrid_tool:
+            tools["hybrid"] = hybrid_tool
+        if strategy in ["graph", "all"] and graph_tool:
+            tools["graph"] = graph_tool
+        if strategy in ["rag", "all"] and hybrid_tool:
+            tools["rag"] = hybrid_tool
+        if strategy in ["graphrag", "all"] and hybrid_tool and graph_tool:
+            tools["graphrag"] = {"hybrid": hybrid_tool, "graph": graph_tool}
 
         click.echo(f"Initialized tools: {list(tools.keys())}\n")
 
@@ -438,7 +451,17 @@ def evaluate(
                     click.echo(f"[{i}/{len(queries)}] ({difficulty}) {query[:60]}...")
 
                 # Execute actual retrieval (pass query_data for graph traversal context)
-                retrieved = _execute_retrieval(tool, strat_name, query, max(k_list), query_data)
+                if strat_name == "rag":
+                    retrieved = run_fixed_rag(query=query, hybrid_tool=tool, k=max(k_list))
+                elif strat_name == "graphrag":
+                    retrieved = run_fixed_graphrag(
+                        query=query,
+                        hybrid_tool=tool["hybrid"],
+                        graph_tool=tool["graph"],
+                        k=max(k_list),
+                    )
+                else:
+                    retrieved = _execute_retrieval(tool, strat_name, query, max(k_list), query_data)
 
                 metrics = evaluate_retrieval(retrieved, relevant, k_values=k_list)
                 all_results.append(
