@@ -10,7 +10,7 @@ import time
 from typing import Optional
 import logging
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
 from agrag.storage import PostgresClient
@@ -106,11 +106,16 @@ def create_keyword_search_tool(postgres_client: Optional[PostgresClient] = None)
                 rank = result.get("rank")
                 score = float(rank) if rank is not None else 0.0
 
+                metadata = result.get("metadata", {}) or {}
+                chunk_id = result.get("chunk_id")
+                if chunk_id:
+                    metadata = {**metadata, "chunk_id": chunk_id}
+
                 search_result = SearchResult(
-                    id=result.get("chunk_id", "unknown"),
+                    id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
                     score=score,
-                    metadata=result.get("metadata", {}),
+                    metadata=metadata,
                     source="postgres_fts",
                 )
                 search_results.append(search_result)

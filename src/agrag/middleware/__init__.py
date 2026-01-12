@@ -3,14 +3,8 @@
 This module provides pre-configured middleware for common use cases.
 Middleware intercepts execution at strategic points in the agent lifecycle.
 
-Available middleware (from langchain.agents.middleware):
-- PIIMiddleware: Detect and handle PII (emails, credit cards, etc.)
-- HumanInTheLoopMiddleware: Pause for human approval before tool execution
-- ModelCallLimitMiddleware: Limit model API calls to control costs
-- ToolCallLimitMiddleware: Limit tool executions
-- SummarizationMiddleware: Summarize long conversations
-- ModelRetryMiddleware: Retry failed model calls with backoff
-- ToolRetryMiddleware: Retry failed tool calls with backoff
+Currently exposed helpers:
+- PII/safety middleware constructors (LangChain middleware, optional dependency)
 
 Usage:
     from agrag.middleware import get_pii_middleware, get_safety_middleware

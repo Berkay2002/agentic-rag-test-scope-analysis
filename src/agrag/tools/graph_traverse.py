@@ -7,7 +7,7 @@ import time
 from typing import List, Dict, Any, Optional
 import logging
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from agrag.tools.schemas import (
     GraphTraverseInput,

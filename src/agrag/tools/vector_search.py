@@ -7,11 +7,12 @@ import time
 from typing import Optional
 import logging
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
+from agrag.kg.ontology import NodeLabel
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
     def vector_search(
         query: str,
         k: int = 10,
-        node_type: Optional[str] = None,
+        node_type: Optional[NodeLabel] = None,
         similarity_threshold: Optional[float] = None,
     ) -> str:
         """Use this tool for semantic queries requiring conceptual understanding.
@@ -94,7 +95,7 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
             # Build metadata filter if node_type provided
             metadata_filter = None
             if node_type:
-                metadata_filter = {"entity_type": node_type}
+                metadata_filter = {"entity_type": node_type.value}
 
             # Perform vector search in PostgreSQL using pgvector
             logger.info(f"Performing pgvector search (entity_type={node_type})")
@@ -111,11 +112,19 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
                 similarity = result.get("similarity")
                 score = float(similarity) if similarity is not None else 0.0
 
+                if similarity_threshold is not None and score < similarity_threshold:
+                    continue
+
+                metadata = result.get("metadata", {}) or {}
+                chunk_id = result.get("chunk_id")
+                if chunk_id:
+                    metadata = {**metadata, "chunk_id": chunk_id}
+
                 search_result = SearchResult(
-                    id=result.get("chunk_id", "unknown"),
+                    id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
                     content=result.get("content", ""),
                     score=score,
-                    metadata=result.get("metadata", {}),
+                    metadata=metadata,
                     source="pgvector",
                 )
                 search_results.append(search_result)

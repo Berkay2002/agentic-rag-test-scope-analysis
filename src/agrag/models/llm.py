@@ -3,7 +3,6 @@
 import logging
 from functools import lru_cache
 
-from google.ai.generativelanguage_v1beta.types import GenerationConfig
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -14,11 +13,10 @@ logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
 def _thinking_level_supported() -> bool:
-    """Check whether installed SDK supports the thinking_level parameter."""
+    """Check whether installed LangChain integration supports thinking_level."""
     try:
-        GenerationConfig().thinking_config.thinking_level = "low"  # type: ignore[attr-defined]
-        return True
-    except (AttributeError, ValueError):
+        return "thinking_level" in ChatGoogleGenerativeAI.model_fields
+    except Exception:
         return False
 
 

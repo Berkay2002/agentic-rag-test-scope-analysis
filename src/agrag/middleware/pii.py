@@ -14,9 +14,25 @@ Example:
     agent = create_agent_graph(middleware=get_pii_middleware())
 """
 
-from typing import List, Optional
+from __future__ import annotations
 
-from langchain.agents.middleware import PIIMiddleware
+from typing import Any, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from langchain.agents.middleware import PIIMiddleware  # noqa: F401
+
+
+def _pii_middleware_cls():
+    try:
+        from langchain.agents.middleware import PIIMiddleware  # type: ignore
+
+        return PIIMiddleware
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(
+            "PII middleware requires `langchain.agents.middleware` to be importable. "
+            "If you’re seeing `ModuleNotFoundError: langgraph.prebuilt`, align your "
+            "LangChain/LangGraph versions and reinstall dependencies."
+        ) from exc
 
 
 def get_pii_middleware(
@@ -26,7 +42,7 @@ def get_pii_middleware(
     apply_to_input: bool = True,
     apply_to_output: bool = True,
     apply_to_tool_results: bool = False,
-) -> List[PIIMiddleware]:
+) -> List[Any]:
     """
     Get pre-configured PII detection middleware.
 
@@ -51,7 +67,8 @@ def get_pii_middleware(
         # User input "My email is john@example.com" becomes:
         # "My email is [REDACTED_EMAIL]"
     """
-    middleware = []
+    PIIMiddleware = _pii_middleware_cls()
+    middleware: List[Any] = []
 
     if redact_emails:
         middleware.append(
@@ -93,7 +110,7 @@ def get_safety_middleware(
     block_api_keys: bool = True,
     block_passwords: bool = True,
     custom_patterns: Optional[List[dict]] = None,
-) -> List[PIIMiddleware]:
+) -> List[Any]:
     """
     Get safety middleware that blocks sensitive patterns.
 
@@ -116,7 +133,8 @@ def get_safety_middleware(
 
         # User input containing "sk-abc123..." will raise an exception
     """
-    middleware = []
+    PIIMiddleware = _pii_middleware_cls()
+    middleware: List[Any] = []
 
     if block_api_keys:
         # OpenAI-style API keys
@@ -164,7 +182,7 @@ def get_safety_middleware(
     return middleware
 
 
-def get_telecom_pii_middleware() -> List[PIIMiddleware]:
+def get_telecom_pii_middleware() -> List[Any]:
     """
     Get PII middleware specifically for telecommunications data.
 
@@ -177,7 +195,8 @@ def get_telecom_pii_middleware() -> List[PIIMiddleware]:
     Returns:
         List of configured PIIMiddleware instances for telecom data
     """
-    middleware = []
+    PIIMiddleware = _pii_middleware_cls()
+    middleware: List[Any] = []
 
     # IMSI: 15-digit number starting with MCC/MNC
     middleware.append(

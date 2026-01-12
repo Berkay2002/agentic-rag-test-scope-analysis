@@ -12,6 +12,7 @@ from agrag.storage.postgres_client import PostgresClient
 from agrag.storage.bm25_retriever import BM25RetrieverManager
 from agrag.data.dual_storage_writer import DualStorageWriter
 from agrag.models.embeddings import get_embedding_service
+from agrag.kg.ontology import RelationshipType
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,12 @@ class DataIngestion:
 
         # Process each relationship type in batches
         for rel_type, type_rels in rels_by_type.items():
+            try:
+                rel_type_enum = RelationshipType(rel_type)
+            except ValueError:
+                logger.warning("Skipping unknown relationship type: %s", rel_type)
+                continue
+
             for i in range(0, len(type_rels), batch_size):
                 batch = type_rels[i : i + batch_size]
 
@@ -176,7 +183,7 @@ class DataIngestion:
                 UNWIND $batch AS rel
                 MATCH (source {{id: rel.source_id}})
                 MATCH (target {{id: rel.target_id}})
-                MERGE (source)-[r:{rel_type}]->(target)
+                MERGE (source)-[r:{rel_type_enum.value}]->(target)
                 SET r += rel.properties
                 RETURN count(r) as count
                 """
@@ -193,7 +200,7 @@ class DataIngestion:
                             single_query = f"""
                             MATCH (source {{id: $source_id}})
                             MATCH (target {{id: $target_id}})
-                            MERGE (source)-[r:{rel_type}]->(target)
+                            MERGE (source)-[r:{rel_type_enum.value}]->(target)
                             SET r += $properties
                             RETURN r
                             """
@@ -208,7 +215,7 @@ class DataIngestion:
                             total_inserted += 1
                         except Exception as inner_e:
                             logger.warning(
-                                f"Failed to insert relationship {rel['source_id']}-[{rel_type}]->{rel['target_id']}: {inner_e}"
+                                f"Failed to insert relationship {rel['source_id']}-[{rel_type_enum.value}]->{rel['target_id']}: {inner_e}"
                             )
 
         logger.info(f"Inserted {total_inserted} relationships into Neo4j")

@@ -23,9 +23,9 @@ class VectorSearchInput(BaseModel):
         le=50,
         description="Number of results to return (1-50)",
     )
-    node_type: NodeLabel = Field(
-        default=NodeLabel.TEST_CASE,
-        description="Type of nodes to search (e.g., TestCase, Requirement, Function)",
+    node_type: Optional[NodeLabel] = Field(
+        default=None,
+        description="Optional node type filter (e.g., TestCase, Requirement, Function). If omitted, searches all.",
     )
     similarity_threshold: Optional[float] = Field(
         default=None,

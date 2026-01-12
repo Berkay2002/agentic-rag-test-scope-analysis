@@ -1,6 +1,7 @@
 """PostgreSQL client with pgvector support for vector and keyword search."""
 
 from typing import List, Dict, Any, Optional
+from enum import Enum
 import psycopg
 from psycopg import Connection
 from psycopg.rows import dict_row, DictRow
@@ -12,6 +13,16 @@ from agrag.config import settings
 from agrag.kg.ontology import POSTGRESQL_SCHEMA
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_metadata_value(value: Any) -> Any:
+    """Normalize values stored in/compared against JSONB metadata.
+
+    Avoids Enum -> 'EnumClass.MEMBER' string conversion, which breaks filtering.
+    """
+    if isinstance(value, Enum):
+        return value.value
+    return value
 
 
 class PostgresClient:
@@ -200,7 +211,7 @@ class PostgresClient:
             conditions = []
             for key, value in metadata_filter.items():
                 conditions.append(f"metadata->>'{key}' = %s")
-                params.append(str(value))
+                params.append(str(_normalize_metadata_value(value)))
 
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
@@ -263,7 +274,7 @@ class PostgresClient:
             conditions = []
             for key, value in metadata_filter.items():
                 conditions.append(f"metadata->>'{key}' = %s")
-                params.append(str(value))
+                params.append(str(_normalize_metadata_value(value)))
 
             if conditions:
                 query_sql += " AND " + " AND ".join(conditions)

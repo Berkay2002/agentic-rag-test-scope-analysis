@@ -1,18 +1,23 @@
-"""Agent definition using LangChain's create_agent API."""
+"""Agent definition using a LangGraph StateGraph.
+
+This project uses a custom ReAct-style loop:
+- `call_model` asks the model what to do next (optionally calling tools)
+- `execute_tools` runs tool calls and appends ToolMessages
+
+Human-in-the-loop (HITL) approvals are implemented via `langgraph.types.interrupt`,
+so interrupts appear in `stream_mode="values"` (matching the CLI’s streaming code).
+"""
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
-from langchain.agents import create_agent
-from langchain.agents.middleware import (
-    HumanInTheLoopMiddleware,
-    ModelCallLimitMiddleware,
-    ToolCallLimitMiddleware,
-)
 from langchain_core.tools import BaseTool
+from langchain_core.messages import HumanMessage
+from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.checkpoint.postgres import PostgresSaver
 
+from agrag.core.nodes import call_model, execute_tools
+from agrag.core.state import AgentState
 from agrag.tools import (
     create_vector_search_tool,
     create_keyword_search_tool,
@@ -20,7 +25,6 @@ from agrag.tools import (
     create_hybrid_search_tool,
 )
 from agrag.storage import Neo4jClient, PostgresClient
-from agrag.models import get_llm
 from agrag.config import settings
 
 logger = logging.getLogger(__name__)
@@ -175,26 +179,31 @@ This is a telecommunications testing system focusing on:
 
 
 def create_agent_graph(
-    checkpointer: Optional[PostgresSaver] = None,
+    checkpointer: Optional[Any] = None,
     neo4j_client: Optional[Neo4jClient] = None,
     postgres_client: Optional[PostgresClient] = None,
     enable_hitl: bool = True,
     middleware: Optional[List] = None,
 ) -> CompiledStateGraph:
     """
-    Create the agent using LangChain's create_agent API.
+    Create the agent StateGraph.
 
     Args:
-        checkpointer: Optional PostgresSaver for persistence (HITL)
+        checkpointer: Optional LangGraph checkpointer for persistence (required for HITL)
         neo4j_client: Optional Neo4j client (creates new if not provided)
         postgres_client: Optional Postgres client (creates new if not provided)
         enable_hitl: Whether to enable human-in-the-loop approval for tools
-        middleware: Optional list of additional middleware to apply
+        middleware: Reserved for future agent middleware support
 
     Returns:
         Compiled agent graph
     """
-    logger.info("Creating agent with create_agent API...")
+    if middleware:
+        logger.warning(
+            "Agent middleware is currently not applied in the custom StateGraph implementation "
+            "(received %d middleware entries).",
+            len(middleware),
+        )
 
     # Initialize clients
     neo4j = neo4j_client or Neo4jClient()
@@ -214,62 +223,69 @@ def create_agent_graph(
 
     logger.info(f"Initialized {len(tools)} tools: {[t.name for t in tools]}")
 
-    # Get LLM instance
-    llm = get_llm()
+    hitl_enabled = bool(enable_hitl and checkpointer is not None)
+    if enable_hitl and not hitl_enabled:
+        logger.info("HITL requested but no checkpointer provided; approvals will be disabled.")
 
-    # Build middleware list
-    agent_middleware = middleware or []
+    builder: StateGraph = StateGraph(AgentState)
 
-    # Add HITL middleware if enabled and checkpointer is available
-    if enable_hitl and checkpointer:
-        logger.info("Adding HumanInTheLoopMiddleware for tool approval")
-        agent_middleware.append(
-            HumanInTheLoopMiddleware(
-                interrupt_on={
-                    "vector_search": True,  # All decisions allowed (approve, edit, reject)
-                    "keyword_search": True,
-                    "graph_traverse": True,
-                    "hybrid_search": True,
-                },
-                description_prefix="Tool execution requires approval",
-            )
-        )
+    def _call_model(state: AgentState) -> dict:
+        return call_model(state, tools, system_prompt=SYSTEM_PROMPT)
 
-    # Add limit middleware to prevent runaway execution
-    agent_middleware.extend(
-        [
-            ModelCallLimitMiddleware(
-                run_limit=settings.max_model_calls,
-                exit_behavior="end",
-            ),
-            ToolCallLimitMiddleware(
-                run_limit=settings.max_tool_calls,
-                exit_behavior="continue",
-            ),
-        ]
+    def _execute_tools(state: AgentState) -> dict:
+        return execute_tools(state, tools, enable_hitl=hitl_enabled)
+
+    def _route_after_model(state: AgentState) -> str:
+        model_calls = state.get("model_call_count", 0)
+        tool_calls = state.get("tool_call_count", 0)
+        if model_calls >= settings.max_model_calls or tool_calls >= settings.max_tool_calls:
+            return "end"
+
+        messages = state.get("messages") or []
+        if not messages:
+            return "end"
+
+        last_message = messages[-1]
+        if getattr(last_message, "tool_calls", None):
+            return "execute_tools"
+        return "end"
+
+    def _route_after_tools(state: AgentState) -> str:
+        model_calls = state.get("model_call_count", 0)
+        tool_calls = state.get("tool_call_count", 0)
+        if model_calls >= settings.max_model_calls or tool_calls >= settings.max_tool_calls:
+            return "end"
+        return "call_model"
+
+    builder.add_node("call_model", _call_model)
+    builder.add_node("execute_tools", _execute_tools)
+    builder.set_entry_point("call_model")
+
+    builder.add_conditional_edges(
+        "call_model",
+        _route_after_model,
+        {
+            "execute_tools": "execute_tools",
+            "end": END,
+        },
+    )
+    builder.add_conditional_edges(
+        "execute_tools",
+        _route_after_tools,
+        {
+            "call_model": "call_model",
+            "end": END,
+        },
     )
 
-    logger.info(f"Configured {len(agent_middleware)} middleware components")
-
-    # Create agent using the new API
-    agent = create_agent(
-        model=llm,
-        tools=tools,
-        system_prompt=SYSTEM_PROMPT,
-        middleware=agent_middleware,
-        checkpointer=checkpointer,
-    )
-
-    logger.info("Agent created successfully with create_agent API")
-
-    return agent
+    return builder.compile(checkpointer=checkpointer)
 
 
 def create_initial_state(user_query: str) -> dict:
     """
     Create initial state for a new conversation.
 
-    The create_agent API uses a simpler state format with just messages.
+    Initial state contains only the new user message.
 
     Args:
         user_query: User's query
@@ -279,6 +295,6 @@ def create_initial_state(user_query: str) -> dict:
     """
     return {
         "messages": [
-            {"role": "user", "content": user_query},
+            HumanMessage(content=user_query),
         ],
     }

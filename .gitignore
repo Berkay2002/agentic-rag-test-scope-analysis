@@ -64,6 +64,7 @@ dmypy.json
 data/*.json
 data/*.csv
 data/*.txt
+data/*.pkl
 !data/.gitkeep
 
 # Logs

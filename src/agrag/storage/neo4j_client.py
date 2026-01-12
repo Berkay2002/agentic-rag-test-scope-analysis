@@ -83,6 +83,9 @@ class Neo4jClient:
         """
         logger.info("Setting up Neo4j schema...")
 
+        if not self.verify_connectivity():
+            raise ConnectionError(f"Neo4j connectivity check failed for {self.uri}")
+
         with self.driver.session(database=self.database) as session:
             # Create constraints
             for constraint_query in NEO4J_CONSTRAINTS:

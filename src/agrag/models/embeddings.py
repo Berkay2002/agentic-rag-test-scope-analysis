@@ -49,6 +49,12 @@ class EmbeddingService:
         """
         try:
             embedding = self.embeddings.embed_query(text)
+            if len(embedding) != settings.embedding_dimensions:
+                raise ValueError(
+                    f"Embedding dimension mismatch: got {len(embedding)}, "
+                    f"expected {settings.embedding_dimensions}. "
+                    f"Check GOOGLE_EMBEDDING_MODEL ({self.model_name}) and PostgreSQL vector dimension."
+                )
             return embedding
         except Exception as e:
             logger.error(f"Failed to generate query embedding: {e}")
@@ -66,6 +72,12 @@ class EmbeddingService:
         """
         try:
             embeddings = self.embeddings.embed_documents(texts)
+            if embeddings and len(embeddings[0]) != settings.embedding_dimensions:
+                raise ValueError(
+                    f"Embedding dimension mismatch: got {len(embeddings[0])}, "
+                    f"expected {settings.embedding_dimensions}. "
+                    f"Check GOOGLE_EMBEDDING_MODEL ({self.model_name}) and PostgreSQL vector dimension."
+                )
             return embeddings
         except Exception as e:
             logger.error(f"Failed to generate document embeddings: {e}")
