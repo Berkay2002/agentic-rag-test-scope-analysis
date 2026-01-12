@@ -3,6 +3,14 @@ from typing import List
 from agrag.kg.ontology import NodeLabel, RelationshipType
 
 
+def _invoke_tool(tool, **kwargs) -> str:
+    if hasattr(tool, "invoke"):
+        return tool.invoke(kwargs)
+    if hasattr(tool, "_run"):
+        return tool._run(**kwargs)
+    raise TypeError("Tool does not support invoke or _run")
+
+
 def _infer_label_from_id(entity_id: str) -> NodeLabel:
     if entity_id.startswith("CR_"):
         return NodeLabel.CHANGE_REQUEST
@@ -20,7 +28,7 @@ def _infer_label_from_id(entity_id: str) -> NodeLabel:
 def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
     from agrag.cli.main import _parse_result_ids
 
-    result_str = hybrid_tool._run(query=query, k=k)
+    result_str = _invoke_tool(hybrid_tool, query=query, k=k)
     return _parse_result_ids(result_str)
 
 
@@ -31,7 +39,8 @@ def run_fixed_graphrag(query: str, hybrid_tool, graph_tool, k: int = 10) -> List
     graph_ids: List[str] = []
     for entity_id in seed_ids[:3]:
         label = _infer_label_from_id(entity_id)
-        graph_result = graph_tool._run(
+        graph_result = _invoke_tool(
+            graph_tool,
             start_node_id=entity_id,
             start_node_label=label,
             relationship_types=[
