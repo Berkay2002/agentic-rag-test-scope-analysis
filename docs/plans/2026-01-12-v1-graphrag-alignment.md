@@ -780,3 +780,7 @@ git commit -m "feat: add fixed rag and graphrag baselines"
 - Completed Task 6 (agent prompt + CLI parsing updates). Commit: aa3afa7
 - Completed Task 7 (fixed RAG + GraphRAG baselines). Commit: 7be436f
 - Validation: `poetry run pytest tests/unit/test_ontology_v1.py tests/unit/test_entity_extractor.py tests/unit/test_synthetic_generator_v1.py tests/unit/test_evaluation_queries_v1.py tests/unit/test_ingestion_mapping.py tests/unit/test_cli_parsing_v1.py tests/unit/test_fixed_baselines.py -q`, `poetry run ruff check src/ tests/`
+- Added E2E coverage for fixed baselines. Commit: 4431f71
+- Documented fixed RAG/GraphRAG evaluation commands. Commit: f98d71f
+- Fixed baseline tool invocation for StructuredTool wrappers. Commit: 3e5dd79
+- Validation: `poetry run ruff check src/agrag/evaluation/fixed_baselines.py tests/integration`, `poetry run pytest tests/integration/test_fixed_baselines_e2e.py`
