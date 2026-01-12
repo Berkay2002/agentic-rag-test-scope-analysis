@@ -5,7 +5,7 @@ domain focused on telecommunications test scenarios.
 """
 
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
 
 
@@ -120,8 +120,8 @@ class Requirement(BaseModel):
     embedding: Optional[List[float]] = Field(None, description="Vector embedding (768-dim)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "REQ_HANDOVER_001",
                 "description": "The system SHALL support LTE handover between adjacent cells with latency < 50ms",
@@ -130,6 +130,7 @@ class Requirement(BaseModel):
                 "category": "handover",
             }
         }
+    )
 
 
 class TestCase(BaseModel):
@@ -146,8 +147,8 @@ class TestCase(BaseModel):
     embedding: Optional[List[float]] = Field(None, description="Vector embedding")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "TC_HANDOVER_001",
                 "name": "Test X2 Handover Success",
@@ -157,6 +158,7 @@ class TestCase(BaseModel):
                 "expected_outcome": "Handover completes within 50ms",
             }
         }
+    )
 
 
 class Function(BaseModel):
@@ -173,8 +175,8 @@ class Function(BaseModel):
     embedding: Optional[List[float]] = Field(None, description="Vector embedding")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "FUNC_initiate_handover",
                 "name": "initiate_handover",
@@ -183,6 +185,7 @@ class Function(BaseModel):
                 "line_number": 45,
             }
         }
+    )
 
 
 class Class(BaseModel):
@@ -198,8 +201,8 @@ class Class(BaseModel):
     embedding: Optional[List[float]] = Field(None, description="Vector embedding")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "CLASS_HandoverManager",
                 "name": "HandoverManager",
@@ -207,6 +210,7 @@ class Class(BaseModel):
                 "methods": ["initiate_handover", "verify_handover", "rollback_handover"],
             }
         }
+    )
 
 
 class Module(BaseModel):
@@ -221,8 +225,8 @@ class Module(BaseModel):
     embedding: Optional[List[float]] = Field(None, description="Vector embedding")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "MOD_network_handover",
                 "name": "network.handover",
@@ -230,6 +234,7 @@ class Module(BaseModel):
                 "architectural_component": "network_layer",
             }
         }
+    )
 
 
 # Relationship Models
