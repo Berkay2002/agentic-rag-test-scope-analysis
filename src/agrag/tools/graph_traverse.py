@@ -14,6 +14,7 @@ from agrag.tools.schemas import (
     GraphTraverseOutput,
     GraphPath,
     GraphNode,
+    GraphEdge,
 )
 from agrag.storage import Neo4jClient
 from agrag.kg.ontology import NodeLabel, RelationshipType
@@ -32,6 +33,15 @@ def _parse_paths(results: List[Dict[str, Any]]) -> List[GraphPath]:
     """
     paths = []
 
+    def _extract_node_id(node_obj: Any) -> Optional[str]:
+        if node_obj is None:
+            return None
+        try:
+            node_dict = dict(node_obj)
+            return node_dict.get("id")
+        except Exception:
+            return None
+
     for result in results:
         path_obj = result.get("path")
         if not path_obj:
@@ -39,6 +49,7 @@ def _parse_paths(results: List[Dict[str, Any]]) -> List[GraphPath]:
 
         # Extract nodes from path
         nodes = []
+        node_ids = []
         try:
             # Neo4j path object has nodes property
             for node in path_obj.nodes:
@@ -51,9 +62,42 @@ def _parse_paths(results: List[Dict[str, Any]]) -> List[GraphPath]:
                     properties={k: v for k, v in node_dict.items() if k not in ["embedding", "id"]},
                 )
                 nodes.append(graph_node)
+                node_ids.append(graph_node.id)
         except Exception as e:
             logger.warning(f"Failed to parse path nodes: {e}")
             continue
+
+        edges: List[GraphEdge] = []
+        try:
+            relationships = list(path_obj.relationships)
+        except Exception as e:
+            logger.warning(f"Failed to parse path relationships: {e}")
+            relationships = []
+
+        if relationships and nodes:
+            for idx, rel in enumerate(relationships):
+                rel_type = getattr(rel, "type", None)
+                rel_type_str = str(rel_type) if rel_type else "UNKNOWN"
+
+                direction = "->"
+                if idx < len(node_ids) - 1:
+                    start_id = getattr(rel, "start_node_id", None)
+                    end_id = getattr(rel, "end_node_id", None)
+                    if start_id is None or end_id is None:
+                        start_id = _extract_node_id(getattr(rel, "start_node", None))
+                        end_id = _extract_node_id(getattr(rel, "end_node", None))
+
+                    if start_id and end_id:
+                        if start_id == node_ids[idx] and end_id == node_ids[idx + 1]:
+                            direction = "->"
+                        elif start_id == node_ids[idx + 1] and end_id == node_ids[idx]:
+                            direction = "<-"
+                        else:
+                            direction = "-"
+                    else:
+                        direction = "-"
+
+                edges.append(GraphEdge(type=rel_type_str, direction=direction))
 
         if nodes:
             graph_path = GraphPath(
@@ -61,6 +105,7 @@ def _parse_paths(results: List[Dict[str, Any]]) -> List[GraphPath]:
                 end_id=result.get("end_id", "unknown"),
                 depth=result.get("depth", 0),
                 nodes=nodes,
+                relationships=edges,
             )
             paths.append(graph_path)
 
@@ -88,9 +133,22 @@ def _format_graph_output(output: GraphTraverseOutput) -> str:
     for i, path in enumerate(output.paths, 1):
         lines.append(f"{i}. Path (depth {path.depth}): {path.start_id} → {path.end_id}")
 
-        # Show node sequence
-        node_sequence = " → ".join([f"{node.label}:{node.id}" for node in path.nodes])
-        lines.append(f"   Sequence: {node_sequence}")
+        # Show node sequence with relationship types when available
+        if path.relationships and len(path.relationships) == max(0, len(path.nodes) - 1):
+            parts = []
+            if path.nodes:
+                parts.append(f"{path.nodes[0].label}:{path.nodes[0].id}")
+            for edge, node in zip(path.relationships, path.nodes[1:]):
+                if edge.direction == "<-":
+                    parts.append(f"<-[{edge.type}]- {node.label}:{node.id}")
+                elif edge.direction == "-":
+                    parts.append(f"-[{edge.type}]- {node.label}:{node.id}")
+                else:
+                    parts.append(f"-[{edge.type}]-> {node.label}:{node.id}")
+            lines.append(f"   Path: {' '.join(parts)}")
+        else:
+            node_sequence = " → ".join([f"{node.label}:{node.id}" for node in path.nodes])
+            lines.append(f"   Sequence: {node_sequence}")
 
         # Show end node details if available
         if path.nodes:

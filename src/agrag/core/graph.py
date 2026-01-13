@@ -38,9 +38,9 @@ Your role is to help engineers analyze test coverage, requirements, and dependen
 ## Response Requirements
 
 When answering, always provide:
-- Ranked test cases (with scores if available)
-- Evidence snippets from retrieved content
-- At least one graph path for each key recommendation
+- Ranked results aligned to the requested entity type (tests, requirements, functions, components, etc.)
+- Evidence snippets from retrieved content (cite entity IDs when available)
+- At least one graph path for each key recommendation (use relationship labels from traversal output)
 - Uncertainty labels when a relationship is inferred vs explicit
 - Keep responses concise by default; expand only if the user asks
 
@@ -49,14 +49,14 @@ When answering, always provide:
 **Answer Summary:**
 <1-3 sentences>
 
-**Ranked Test Cases:**
-- <TC_ID>: <short description> (score: <score|n/a>) [explicit|inferred]
+**Ranked Results:**
+- <ENTITY_ID> (<EntityType>): <short description> (score: <score|n/a>) [explicit|inferred]
 
 **Evidence:**
-- "<snippet>" (source: <entity_id or tool>)
+- "<snippet>" (source: <entity_id>; use tool name only if no entity ID appears in the snippet)
 
 **Graph Paths:**
-- <NodeA> -[REL]-> <NodeB> -[REL]-> <NodeC>
+- <NodeA> -[REL]-> <NodeB> -[REL]-> <NodeC> (use relationship types shown by graph_traverse)
 
 **Uncertainty:**
 - <what is inferred or missing>
@@ -159,6 +159,8 @@ This is a telecommunications testing system focusing on:
 - **Network Elements**: eNodeB, MME, SGW, PGW, HSS (core network mobility management)
 - **Test Types**: Unit, integration, protocol conformance, performance, regression, stress
 - **Key Concepts**: Handover latency, bearer establishment, session continuity, QoS
+
+**Relationship Types (use only these):** TOUCHES, DEFINED_IN, PART_OF, COVERS, VERIFIES
 
 ## Cost Efficiency Rules (CRITICAL)
 
@@ -297,4 +299,7 @@ def create_initial_state(user_query: str) -> dict:
         "messages": [
             HumanMessage(content=user_query),
         ],
+        "tool_call_count": 0,
+        "model_call_count": 0,
+        "final_answer": "",
     }

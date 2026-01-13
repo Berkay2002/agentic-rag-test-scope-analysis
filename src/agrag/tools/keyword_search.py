@@ -37,8 +37,8 @@ def _format_keyword_output(output: KeywordSearchOutput) -> str:
     ]
 
     for i, result in enumerate(output.results, 1):
-        lines.append(f"{i}. ID: {result.id} (FTS Rank: {result.score:.4f})")
-        lines.append(f"   Content: {result.content[:200]}...")
+        lines.append(f"{i}. Entity ID: {result.id} (FTS Rank: {result.score:.4f})")
+        lines.append(f"   Snippet: {result.content[:200]}...")
         if result.metadata:
             entity_type = result.metadata.get("entity_type", "Unknown")
             lines.append(f"   Entity Type: {entity_type}")

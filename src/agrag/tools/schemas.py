@@ -176,6 +176,16 @@ class GraphNode(BaseModel):
     )
 
 
+class GraphEdge(BaseModel):
+    """Graph relationship in traversal result."""
+
+    type: str = Field(..., description="Relationship type")
+    direction: str = Field(
+        default="->",
+        description="Direction from node i to node i+1: '->', '<-', or '-'",
+    )
+
+
 class GraphPath(BaseModel):
     """Graph path in traversal result."""
 
@@ -185,6 +195,10 @@ class GraphPath(BaseModel):
     nodes: List[GraphNode] = Field(
         default_factory=list,
         description="Nodes in path",
+    )
+    relationships: List[GraphEdge] = Field(
+        default_factory=list,
+        description="Relationships aligned to node order",
     )
 
 
