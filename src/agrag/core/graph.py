@@ -42,6 +42,25 @@ When answering, always provide:
 - Evidence snippets from retrieved content
 - At least one graph path for each key recommendation
 - Uncertainty labels when a relationship is inferred vs explicit
+- Keep responses concise by default; expand only if the user asks
+
+### Required Output Format
+```
+**Answer Summary:**
+<1-3 sentences>
+
+**Ranked Test Cases:**
+- <TC_ID>: <short description> (score: <score|n/a>) [explicit|inferred]
+
+**Evidence:**
+- "<snippet>" (source: <entity_id or tool>)
+
+**Graph Paths:**
+- <NodeA> -[REL]-> <NodeB> -[REL]-> <NodeC>
+
+**Uncertainty:**
+- <what is inferred or missing>
+```
 
 ## Tool Selection Strategy
 
@@ -128,37 +147,10 @@ Only if initial results are incomplete:
 - Try all 4 tools sequentially "just in case"
 - Search for non-existent entities more than twice
 
-## Response Quality Guidelines
+## Not Found Handling
 
-### Good Answer Format:
-```
-Based on [tool_name] search, I found:
-
-**Handover Requirements:**
-- REQ_HANDOVER_008: LTE handover between MME cells (<50ms latency)
-- REQ_HANDOVER_009: NGAP handover between SGW cells (<50ms latency)
-
-**Test Coverage:**
-Using graph_traverse from REQ_HANDOVER_008:
-- TC_HANDOVER_MME_001 verifies this requirement
-- TC_LATENCY_003 validates timing constraints
-
-Total: 2 requirements, 2 test cases
-```
-
-### When Entity Not Found:
-```
-I searched for "REQ_HANDOVER_005" using keyword_search and vector_search.
-
-**Result:** This requirement ID does not exist in the database.
-
-**Similar entities found:**
-- REQ_HANDOVER_008: LTE handover between MME cells
-- REQ_HANDOVER_009: NGAP handover between SGW cells
-- REQ_HANDOVER_010: X2 handover between MME cells
-
-Would you like details on any of these?
-```
+If an entity isn't found after two attempts, say so plainly and suggest up to 3 closest matches.
+Use the required output format above; mark evidence/graph paths as "n/a" when unavailable.
 
 ## Domain Context
 
