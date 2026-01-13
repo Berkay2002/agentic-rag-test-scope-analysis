@@ -1,9 +1,10 @@
 """Graph nodes for StateGraph agent."""
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 from agrag.core.state import AgentState
@@ -11,6 +12,8 @@ from agrag.models import get_llm
 from agrag.config import settings
 
 logger = logging.getLogger(__name__)
+
+_REL_LABEL_PATTERN = re.compile(r"\[([A-Za-z0-9_]+)\]")
 
 
 def _render_content(content: Any) -> str:
@@ -36,6 +39,77 @@ def _render_content(content: Any) -> str:
 
     # Fallback to string conversion
     return str(content)
+
+
+def _collect_tool_relationships(messages: List[Any]) -> set[str]:
+    """Extract relationship labels from tool outputs after the most recent user message."""
+    last_user_index = None
+    for idx in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[idx], HumanMessage):
+            last_user_index = idx
+            break
+
+    start_index = (last_user_index + 1) if last_user_index is not None else 0
+    relationships: set[str] = set()
+    for message in messages[start_index:]:
+        if not isinstance(message, ToolMessage):
+            continue
+        content = _render_content(message.content)
+        for label in _REL_LABEL_PATTERN.findall(content):
+            relationships.add(label.upper())
+
+    return relationships
+
+
+def _sanitize_graph_paths(content: str, allowed_relationships: set[str]) -> str:
+    """Remove graph path lines that cite relationships not found in tool output."""
+    if not content:
+        return content
+
+    lines = content.splitlines()
+    header_idx = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "**Graph Paths:**":
+            header_idx = idx
+            break
+
+    if header_idx is None:
+        return content
+
+    end_idx = len(lines)
+    for idx in range(header_idx + 1, len(lines)):
+        line = lines[idx].strip()
+        if line.startswith("**") and line.endswith("**"):
+            end_idx = idx
+            break
+
+    graph_lines = lines[header_idx + 1 : end_idx]
+    filtered: List[str] = []
+    for line in graph_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        labels = {label.upper() for label in _REL_LABEL_PATTERN.findall(line)}
+        if not labels or labels.issubset(allowed_relationships):
+            filtered.append(line)
+
+    if not filtered:
+        filtered = ["- n/a (no verified graph paths from tool output)"]
+
+    updated_lines = lines[: header_idx + 1] + filtered + lines[end_idx:]
+    return "\n".join(updated_lines)
+
+
+def _update_message_content(message: AIMessage, content: str) -> AIMessage:
+    if hasattr(message, "model_copy"):
+        return message.model_copy(update={"content": content})
+    if hasattr(message, "copy"):
+        return message.copy(update={"content": content})
+    try:
+        message.content = content
+        return message
+    except Exception:
+        return AIMessage(content=content)
 
 
 def call_model(
@@ -84,6 +158,13 @@ def call_model(
                 ) from exc
     else:
         response = _invoke()
+
+    if not getattr(response, "tool_calls", None) and isinstance(response, AIMessage):
+        if isinstance(response.content, str):
+            allowed_relationships = _collect_tool_relationships(state.get("messages", []))
+            sanitized = _sanitize_graph_paths(response.content, allowed_relationships)
+            if sanitized != response.content:
+                response = _update_message_content(response, sanitized)
 
     # Increment model call counter
     model_call_count = state.get("model_call_count", 0) + 1
