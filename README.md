@@ -37,6 +37,8 @@ This system implements a comprehensive agentic RAG architecture that aims to add
 - **Middleware Support**: Built-in ModelCallLimit, ToolCallLimit, HumanInTheLoop, and PII detection middleware
 - **LangSmith Integration**: Full observability and debugging
 - **Gemini Thinking Configuration**: Adjustable reasoning depth (low/medium/high/dynamic) via CLI commands
+- **Headless Mode**: Scriptable CLI with text/json/stream-json output for automation
+- **Conversation Export**: Export chat transcripts with optional tool call details
 
 ### Storage & Retrieval
 - **Dual Storage Architecture**: Neo4j (knowledge graph) + PostgreSQL (pgvector + pg_search BM25)
@@ -153,6 +155,7 @@ See `.env.example` for all configuration options. Key settings:
 ## Usage
 
 ### CLI Commands
+See `src/agrag/cli/README.md` for a deeper CLI reference, including headless mode.
 
 #### Interactive Chat (Recommended)
 ```bash
@@ -190,8 +193,36 @@ The interactive chat mode provides a conversational interface with:
 - `/stats` - Show session statistics (messages, tool calls, duration)
 - `/reset` - Start new conversation
 - `/save` - Save conversation to file
+- `/export` - Export conversation transcript (use `--verbose` for tool args/results)
+- `/verbose` - Toggle tool call arguments in output
 - `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
 - `/exit` or `/quit` - Exit chat
+
+#### Headless Mode (Scripting & Automation)
+```bash
+# Direct prompt
+poetry run agrag -p "What tests cover handover requirements?"
+
+# Pipe stdin
+echo "Summarize this" | poetry run agrag
+
+# Combine prompt with stdin
+cat README.md | poetry run agrag -p "Summarize this documentation"
+
+# JSON output
+poetry run agrag -p "List test cases" --output-format json
+
+# Streaming JSON (JSONL)
+poetry run agrag -p "Analyze dependencies" --output-format stream-json
+
+# Persistent headless session (requires Postgres checkpointer)
+poetry run agrag -p "List handover requirements" --thread-id eval-001
+poetry run agrag -p "Now show tests that verify those" --thread-id eval-001
+```
+
+Headless mode runs without the interactive UI and is intended for scripts, CI, and pipelines.
+When `--thread-id` is provided, the CLI will attempt to use the Postgres checkpointer to
+resume the same session across invocations (falls back to in-memory if unavailable).
 
 #### Query the System
 ```bash
@@ -451,7 +482,9 @@ src/agrag/
 │   ├── display.py    # Output formatting utilities
 │   ├── hitl.py       # Human-in-the-loop utilities
 │   ├── thinking.py   # Gemini thinking budget configuration
-│   └── commands.py   # Command handler helpers
+│   ├── commands.py   # Command handler helpers
+│   ├── headless.py   # Headless (non-interactive) execution
+│   └── README.md     # CLI usage guide
 ├── config/           # Configuration and logging
 ├── core/             # Agent using create_agent API
 │   ├── state.py      # AgentState definition

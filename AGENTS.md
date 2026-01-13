@@ -121,6 +121,16 @@ poetry run agrag chat --thread-id my-session
 # YOLO mode (autonomous execution without approvals)
 poetry run agrag chat --yolo
 
+# Headless mode (non-interactive, for scripting)
+poetry run agrag -p "What tests cover handover requirements?"
+
+# Headless streaming JSON (JSONL)
+poetry run agrag -p "Analyze dependencies" --output-format stream-json
+
+# Headless persistent session (requires Postgres checkpointer)
+poetry run agrag -p "List handover requirements" --thread-id eval-001
+poetry run agrag -p "Now show tests that verify those" --thread-id eval-001
+
 # Single query (non-interactive, for scripting)
 poetry run agrag query "What tests cover handover requirements?"
 
@@ -167,6 +177,8 @@ The `agrag chat` command starts an interactive REPL session similar to Claude Co
 - `/stats` - Show session statistics
 - `/reset` - Start a new conversation
 - `/save` - Save conversation to file
+- `/export` - Export conversation transcript (use `--verbose` for tool args/results)
+- `/verbose` - Toggle tool call arguments in output
 - `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
 - `/exit` or `/quit` - Exit chat
 

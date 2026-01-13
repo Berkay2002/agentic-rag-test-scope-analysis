@@ -35,18 +35,20 @@ class CheckpointerInitResult:
 
 def initialize_checkpointer(
     enable_hitl: bool,
+    enable_persistence: bool = False,
     fallback_to_memory: bool = True,
 ) -> CheckpointerInitResult:
     """Attempt to initialize a PostgresSaver checkpointer with optional fallback.
 
     Args:
-        enable_hitl: Whether checkpointing is required (HITL/session persistence).
+        enable_hitl: Whether checkpointing is required for HITL approvals.
+        enable_persistence: Whether persistence is needed without HITL (e.g., headless sessions).
         fallback_to_memory: Whether to fall back to MemorySaver when Postgres is unavailable.
 
     Returns:
         CheckpointerInitResult describing the initialized saver (if any).
     """
-    if not enable_hitl:
+    if not enable_hitl and not enable_persistence:
         return CheckpointerInitResult(
             checkpointer=None,
             backend="disabled",

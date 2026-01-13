@@ -17,7 +17,7 @@ from agrag.core.checkpointing import initialize_checkpointer, summarize_error
 logger = logging.getLogger(__name__)
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.option(
     "--log-level",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
@@ -30,14 +30,68 @@ logger = logging.getLogger(__name__)
     default="text",
     help="Log format",
 )
-def cli(log_level: str, log_format: str):
+@click.option(
+    "--prompt",
+    "-p",
+    type=str,
+    default=None,
+    help="Run in headless mode with a direct prompt (no interactive UI)",
+)
+@click.option(
+    "--output-format",
+    type=click.Choice(["text", "json", "stream-json"]),
+    default="text",
+    help="Headless output format",
+)
+@click.option(
+    "--thread-id",
+    type=str,
+    default=None,
+    help="Headless thread ID for persistent sessions",
+)
+@click.option(
+    "--debug/--no-debug",
+    default=False,
+    help="Enable debug logging in headless mode",
+)
+@click.pass_context
+def cli(
+    ctx: click.Context,
+    log_level: str,
+    log_format: str,
+    prompt: Optional[str],
+    output_format: str,
+    thread_id: Optional[str],
+    debug: bool,
+):
     """Agentic GraphRAG for Test Scope Analysis.
 
     A comprehensive retrieval-augmented generation system for analyzing
     test coverage and dependencies in telecommunications software systems.
     """
     setup_logging(level=log_level, format_type=log_format)
+
+    if ctx.invoked_subcommand:
+        if prompt:
+            raise click.UsageError("--prompt is only valid without subcommands.")
+        logger.info("AgRAG CLI initialized")
+        return
+
+    from agrag.cli.headless import build_prompt, read_stdin, run_headless
+
+    stdin_text = read_stdin()
+    if prompt or stdin_text:
+        combined_prompt = build_prompt(prompt, stdin_text)
+        exit_code = run_headless(
+            combined_prompt,
+            output_format=output_format,
+            thread_id=thread_id,
+            debug=debug,
+        )
+        sys.exit(exit_code)
+
     logger.info("AgRAG CLI initialized")
+    click.echo(ctx.get_help())
 
 
 @cli.command()
