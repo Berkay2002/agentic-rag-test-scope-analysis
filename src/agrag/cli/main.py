@@ -81,9 +81,15 @@ def init():
     default=False,
     help="Disable approvals - agent executes autonomously (YOLO mode)",
 )
+@click.option(
+    "--verbose/--no-verbose",
+    default=False,
+    help="Show tool call details in chat output",
+)
 def chat(
     thread_id: Optional[str],
     yolo: bool,
+    verbose: bool,
 ):
     """Start an interactive chat session with the agent.
 
@@ -100,6 +106,7 @@ def chat(
       agrag chat                           # Safe mode - you approve each action
       agrag chat --thread-id my-session    # Resume previous chat (with approvals)
       agrag chat --yolo                    # YOLO mode - autonomous execution
+      agrag chat --verbose                 # Show tool call details
     """
     from agrag.cli.interactive import start_interactive_chat
 
@@ -107,6 +114,7 @@ def chat(
         start_interactive_chat(
             thread_id=thread_id,
             enable_hitl=not yolo,  # HITL is enabled unless YOLO mode
+            verbose=verbose,
         )
     except Exception as e:
         click.echo(f"\n✗ Chat failed: {e}", err=True)

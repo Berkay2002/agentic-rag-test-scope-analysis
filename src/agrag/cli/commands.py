@@ -21,8 +21,14 @@ class ChatSessionProtocol(Protocol):
     start_time: datetime
     thinking_budget: Optional[int]
     enable_hitl: bool
+    verbose: bool
 
     def _persistence_label(self) -> str: ...
+    def export_conversation(
+        self, filename: Optional[str] = None, include_tool_details: bool = False
+    ) -> str: ...
+    def reset_conversation(self) -> None: ...
+    def set_verbose(self, enabled: bool) -> None: ...
 
 
 def print_help(console: Console) -> None:
@@ -39,6 +45,8 @@ def print_help(console: Console) -> None:
 - `/stats` - Show statistics
 - `/reset` - Start new conversation
 - `/save` - Save conversation to file
+- `/export` - Export conversation transcript (use --verbose for tool details)
+- `/verbose` - Toggle tool call arguments and logs in output
 - `/thinking [preset]` - View or set thinking budget
 - `/exit`, `/quit` - Exit chat
 
@@ -157,12 +165,55 @@ class CommandHandler:
             self.session.tool_calls_total = 0
             self.session.model_calls_total = 0
             self.session.start_time = datetime.now()
+            self.session.reset_conversation()
             self.console.print(
                 f"[green]✓ Conversation reset. New session: {self.session.thread_id}[/green]"
             )
 
         elif command == "/save":
             save_conversation(self.console, self.session.thread_id)
+
+        elif command.startswith("/export"):
+            parts = raw_command.split()
+            filename: Optional[str] = None
+            include_tool_details = False
+            for token in parts[1:]:
+                token_lower = token.lower()
+                if token_lower in {"--verbose", "--debug", "verbose", "debug"}:
+                    include_tool_details = True
+                    continue
+                if filename is None:
+                    filename = token
+                    continue
+                self.console.print(
+                    "[red]Invalid /export usage. Use /export [filename] [--verbose].[/red]"
+                )
+                return True
+            try:
+                output_path = self.session.export_conversation(
+                    filename=filename, include_tool_details=include_tool_details
+                )
+                self.console.print(f"[green]✓ Conversation exported to {output_path}[/green]")
+            except Exception as e:
+                self.console.print(f"[red]✗ Failed to export: {e}[/red]")
+
+        elif command.startswith("/verbose"):
+            parts = raw_command.split(maxsplit=1)
+            if len(parts) == 1:
+                self.session.set_verbose(not self.session.verbose)
+            else:
+                value = parts[1].strip().lower()
+                if value in {"on", "true", "1", "yes"}:
+                    self.session.set_verbose(True)
+                elif value in {"off", "false", "0", "no"}:
+                    self.session.set_verbose(False)
+                else:
+                    self.console.print(
+                        "[red]Invalid /verbose value. Use on/off or omit to toggle.[/red]"
+                    )
+                    return True
+            state = "on" if self.session.verbose else "off"
+            self.console.print(f"[green]✓ Verbose mode is now {state}[/green]")
 
         elif command.startswith("/thinking"):
             new_budget = handle_thinking_command(

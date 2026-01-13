@@ -1,5 +1,7 @@
 """Interactive chat interface for the AgRAG agent."""
 
+import json
+import logging
 import sys
 import traceback
 import uuid
@@ -8,6 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import AIMessage, ToolMessage
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import WordCompleter
@@ -23,6 +26,7 @@ from agrag.cli.display import (
     print_error,
     print_query_stats,
     print_welcome,
+    print_tool_call,
 )
 from agrag.cli.hitl import HITLHandler
 from agrag.config import settings
@@ -46,6 +50,8 @@ CHAT_COMMANDS = [
     "/quit",
     "/reset",
     "/save",
+    "/export",
+    "/verbose",
     "/thinking",
 ]
 
@@ -57,6 +63,7 @@ class InteractiveChat:
         self,
         thread_id: Optional[str] = None,
         enable_hitl: bool = True,
+        verbose: bool = False,
     ):
         """Initialize the interactive chat.
 
@@ -67,6 +74,11 @@ class InteractiveChat:
         self.console = Console()
         self.thread_id = thread_id or f"chat-{uuid.uuid4().hex[:8]}"
         self.enable_hitl = enable_hitl
+        self.verbose = verbose
+        self.conversation_log: list[dict] = []
+        self._tool_call_index: dict[str, dict] = {}
+        self._base_log_level = logging.getLogger().level
+        self._apply_logging_mode()
 
         # Initialize checkpointer
         self._init_checkpointer()
@@ -155,6 +167,97 @@ class InteractiveChat:
             return "In-memory (session only)"
         return "Enabled"
 
+    def _set_log_level(self, level: int) -> None:
+        """Apply a log level to the root logger and its handlers."""
+        root_logger = logging.getLogger()
+        root_logger.setLevel(level)
+        for handler in root_logger.handlers:
+            handler.setLevel(level)
+
+    def _apply_logging_mode(self) -> None:
+        """Adjust logging verbosity for chat UX."""
+        if self.verbose:
+            self._set_log_level(self._base_log_level)
+        else:
+            self._set_log_level(logging.ERROR)
+
+    def set_verbose(self, enabled: bool) -> None:
+        """Toggle verbose mode and update logging behavior."""
+        self.verbose = enabled
+        self._apply_logging_mode()
+
+    def reset_conversation(self) -> None:
+        """Reset stored conversation logs for this session."""
+        self.conversation_log = []
+        self._tool_call_index = {}
+
+    def _log_event(self, entry: dict) -> None:
+        """Append a structured event to the conversation log."""
+        entry["timestamp"] = datetime.now().isoformat()
+        self.conversation_log.append(entry)
+
+    def export_conversation(
+        self, filename: Optional[str] = None, include_tool_details: bool = False
+    ) -> str:
+        """Export the conversation log to a markdown or text file."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_name = filename or f"conversation_{self.thread_id}_{timestamp}.md"
+        if not output_name.endswith((".md", ".txt")):
+            output_name = f"{output_name}.md"
+
+        lines: list[str] = []
+
+        for entry in self.conversation_log:
+            entry_type = entry.get("type", "event")
+            if entry_type == "user":
+                lines.append(f"You: {entry.get('content', '')}")
+                lines.append("")
+                continue
+
+            if entry_type == "assistant":
+                lines.append(f"Assistant: {entry.get('content', '')}")
+                lines.append("")
+                continue
+
+            if entry_type == "tool_call":
+                tool_name = entry.get("tool_name", "unknown")
+                if include_tool_details:
+                    args_json = json.dumps(
+                        entry.get("arguments", {}),
+                        indent=2,
+                        ensure_ascii=True,
+                        default=str,
+                    )
+                    lines.append(f"Tool Call: {tool_name}")
+                    lines.append("Tool Args:")
+                    lines.append("```json")
+                    lines.append(args_json)
+                    lines.append("```")
+                    lines.append("")
+                else:
+                    lines.append(f"Tool Call: {tool_name}")
+                    lines.append("")
+                continue
+
+            if entry_type == "tool_result":
+                if include_tool_details:
+                    tool_name = entry.get("tool_name", "unknown")
+                    lines.append(f"Tool Result: {tool_name}")
+                    lines.append("Output:")
+                    lines.append("```")
+                    lines.append(entry.get("content", ""))
+                    lines.append("```")
+                    lines.append("")
+                continue
+
+            lines.append(entry.get("content", ""))
+            lines.append("")
+
+        with open(output_name, "w") as handle:
+            handle.write("\n".join(lines))
+
+        return output_name
+
     def _print_welcome(self) -> None:
         """Print welcome message."""
         print_welcome(
@@ -176,6 +279,7 @@ class InteractiveChat:
             initial_state = create_initial_state(query)
             stats = {"tool_calls": 0, "model_calls": 0}
             final_answer = "No answer generated"
+            self._log_event({"type": "user", "content": query})
 
             with self.console.status("[bold green]Agent is thinking...") as status:
                 result = self._stream_with_hitl(initial_state, config, status, stats)
@@ -183,6 +287,7 @@ class InteractiveChat:
                     final_answer = result["answer"]
                 elif result.get("cancelled"):
                     final_answer = "Query cancelled by user."
+                    self._log_event({"type": "assistant", "content": final_answer})
 
             # Update stats
             self.tool_calls_total += stats["tool_calls"]
@@ -278,13 +383,50 @@ class InteractiveChat:
             tool_names = [tc.get("name", "unknown") for tc in last_message.tool_calls]
             result["tool_calls"] = len(last_message.tool_calls)
             status.update(f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}")
+            if self.verbose:
+                status.stop()
+            for tool_call in last_message.tool_calls:
+                tool_call_id = str(tool_call.get("id", ""))
+                tool_name = tool_call.get("name", "unknown")
+                tool_args = tool_call.get("args", {})
+                self._tool_call_index[tool_call_id] = {
+                    "name": tool_name,
+                    "args": tool_args,
+                }
+                self._log_event(
+                    {
+                        "type": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                        "arguments": tool_args,
+                    }
+                )
+                if self.verbose:
+                    print_tool_call(self.console, tool_name, tool_call_id, tool_args)
+            if self.verbose:
+                status.start()
+                status.update(f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}")
 
         # Check for model response (AI message without tool calls)
-        elif hasattr(last_message, "content") and last_message.content:
-            if hasattr(last_message, "type") and last_message.type == "ai":
-                result["model_calls"] = 1
-                result["answer"] = self._extract_content(last_message.content)
-                status.update("[bold blue]Agent is reasoning...")
+        elif isinstance(last_message, ToolMessage):
+            tool_call_id = str(last_message.tool_call_id or "")
+            tool_info = self._tool_call_index.get(tool_call_id, {})
+            tool_name = tool_info.get("name")
+            tool_output = self._extract_content(last_message.content)
+            self._log_event(
+                {
+                    "type": "tool_result",
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "content": tool_output,
+                }
+            )
+
+        elif isinstance(last_message, AIMessage) and last_message.content:
+            result["model_calls"] = 1
+            result["answer"] = self._extract_content(last_message.content)
+            self._log_event({"type": "assistant", "content": result["answer"]})
+            status.update("[bold blue]Agent is reasoning...")
 
         return result
 
@@ -350,15 +492,18 @@ class InteractiveChat:
 def start_interactive_chat(
     thread_id: Optional[str] = None,
     enable_hitl: bool = True,
+    verbose: bool = False,
 ) -> None:
     """Start an interactive chat session.
 
     Args:
         thread_id: Thread ID for conversation persistence (auto-generated if not provided).
         enable_hitl: Whether to require approval before executing tools (default: True).
+        verbose: Whether to show tool call details in output.
     """
     chat = InteractiveChat(
         thread_id=thread_id,
         enable_hitl=enable_hitl,
+        verbose=verbose,
     )
     chat.run()

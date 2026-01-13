@@ -1,5 +1,7 @@
 """Display utilities for interactive chat."""
 
+import json
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -31,6 +33,8 @@ Welcome to the Agentic GraphRAG Test Scope Analysis system!
 - `/stats` - Show conversation statistics
 - `/reset` - Reset conversation (start fresh)
 - `/save` - Save conversation to file
+- `/export` - Export conversation transcript (use --verbose for tool details)
+- `/verbose` - Toggle tool call arguments and logs in output
 - `/exit` or `/quit` - Exit the chat
 
 **Tips:**
@@ -77,6 +81,19 @@ def print_agent_response(console: Console, response: str) -> None:
             padding=(1, 2),
         )
     )
+
+
+def print_tool_call(
+    console: Console, tool_name: str, tool_call_id: str, arguments: dict
+) -> None:
+    """Print tool call details when verbose mode is enabled."""
+    args_json = json.dumps(arguments, indent=2, ensure_ascii=True, default=str)
+    content = (
+        f"**Tool Call:** `{tool_name}`\n\n"
+        f"**Tool Call ID:** `{tool_call_id or 'n/a'}`\n\n"
+        f"**Args:**\n```json\n{args_json}\n```"
+    )
+    console.print(Panel(Markdown(content), title="Tool Call", border_style="yellow"))
 
 
 def print_query_stats(console: Console, tool_calls: int, model_calls: int) -> None:
