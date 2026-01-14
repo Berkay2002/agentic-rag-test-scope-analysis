@@ -33,6 +33,14 @@ from .agentic_evaluator import (
     create_evaluation_graph,
 )
 
+from .diversity_metrics import (
+    calculate_diversity_metrics,
+)
+
+from .expansion_metrics import (
+    calculate_expansion_metrics,
+)
+
 __all__ = [
     # Metrics
     "precision_at_k",
@@ -59,4 +67,8 @@ __all__ = [
     "AgentEvaluationSummary",
     "AgenticEvaluator",
     "create_evaluation_graph",
+    # Diversity metrics
+    "calculate_diversity_metrics",
+    # Expansion metrics
+    "calculate_expansion_metrics",
 ]

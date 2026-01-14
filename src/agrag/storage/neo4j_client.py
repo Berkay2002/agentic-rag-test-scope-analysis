@@ -5,6 +5,7 @@ from neo4j import GraphDatabase, Driver
 import logging
 
 from agrag.config import settings
+from agrag.storage.retry_decorators import resilient_db_operation
 from agrag.kg.ontology import (
     NEO4J_CONSTRAINTS,
     NEO4J_VECTOR_INDEXES,
@@ -50,6 +51,17 @@ class Neo4jClient:
         if self.driver:
             self.driver.close()
             logger.info("Neo4j client closed")
+
+    def is_healthy(self) -> bool:
+        """Check if Neo4j connection is healthy.
+
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        try:
+            return self.verify_connectivity()
+        except Exception:
+            return False
 
     def __enter__(self):
         """Context manager entry."""
@@ -105,6 +117,7 @@ class Neo4jClient:
 
         logger.info("Neo4j schema setup complete")
 
+    @resilient_db_operation
     def create_node(
         self,
         label: NodeLabel,
@@ -131,6 +144,7 @@ class Neo4jClient:
             record = result.single()
             return dict(record["n"]) if record else {}
 
+    @resilient_db_operation
     def create_relationship(
         self,
         source_id: str,
@@ -180,6 +194,7 @@ class Neo4jClient:
                 }
             return {}
 
+    @resilient_db_operation
     def vector_search(
         self,
         query_embedding: List[float],
@@ -234,6 +249,7 @@ class Neo4jClient:
 
             return results
 
+    @resilient_db_operation
     def graph_traverse(
         self,
         start_node_id: str,
@@ -303,6 +319,7 @@ class Neo4jClient:
 
             return paths
 
+    @resilient_db_operation
     def execute_cypher(
         self,
         query: str,
@@ -324,6 +341,7 @@ class Neo4jClient:
             result = session.run(query, **params)
             return [dict(record) for record in result]
 
+    @resilient_db_operation
     def get_node_by_id(
         self,
         node_id: str,

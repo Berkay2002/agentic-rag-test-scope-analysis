@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     vector_search_similarity_threshold: float = 0.7
     graph_traversal_max_depth: int = 3
     hybrid_rrf_k: int = 60  # Reciprocal Rank Fusion constant
+    enable_query_expansion: bool = False  # Enable query expansion by default
+    max_query_expansions: int = 5  # Maximum number of query expansions to generate
 
     # Middleware Configuration
     enable_pii_detection: bool = True

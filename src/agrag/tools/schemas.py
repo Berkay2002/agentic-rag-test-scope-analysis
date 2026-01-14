@@ -37,6 +37,40 @@ class VectorSearchInput(BaseModel):
         le=1.0,
         description="Minimum similarity threshold (0.0-1.0)",
     )
+    enable_diversification: bool = Field(
+        default=False,
+        description="Enable result diversification to reduce redundancy"
+    )
+    diversification_method: str = Field(
+        default="mmr",
+        description="Diversification method: mmr|clustering|dedup"
+    )
+    diversity_factor: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Diversity vs relevance trade-off (0.0=max diversity, 1.0=max relevance)"
+    )
+    deduplication_threshold: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for deduplication (0.9=90% similar considered duplicate)"
+    )
+    enable_query_expansion: bool = Field(
+        default=False,
+        description="Enable automatic query expansion"
+    )
+    expansion_methods: List[str] = Field(
+        default=["synonyms"],
+        description="Methods to use for expansion: synonyms|llm|pseudo_relevance"
+    )
+    max_expansion_variants: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of query variants to generate"
+    )
 
 
 class KeywordSearchInput(BaseModel):
@@ -56,6 +90,40 @@ class KeywordSearchInput(BaseModel):
     entity_type: Optional[str] = Field(
         default=None,
         description="Filter by entity type (e.g., 'TestCase', 'Function')",
+    )
+    enable_diversification: bool = Field(
+        default=False,
+        description="Enable result diversification to reduce redundancy"
+    )
+    diversification_method: str = Field(
+        default="mmr",
+        description="Diversification method: mmr|clustering|dedup"
+    )
+    diversity_factor: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Diversity vs relevance trade-off (0.0=max diversity, 1.0=max relevance)"
+    )
+    deduplication_threshold: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for deduplication (0.9=90% similar considered duplicate)"
+    )
+    enable_query_expansion: bool = Field(
+        default=False,
+        description="Enable automatic query expansion"
+    )
+    expansion_methods: List[str] = Field(
+        default=["synonyms"],
+        description="Methods to use for expansion: synonyms|llm|pseudo_relevance"
+    )
+    max_expansion_variants: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of query variants to generate"
     )
 
 
@@ -122,6 +190,40 @@ class HybridSearchInput(BaseModel):
     entity_type: Optional[str] = Field(
         default=None,
         description="Filter by entity type",
+    )
+    enable_diversification: bool = Field(
+        default=False,
+        description="Enable result diversification to reduce redundancy"
+    )
+    diversification_method: str = Field(
+        default="mmr",
+        description="Diversification method: mmr|clustering|dedup"
+    )
+    diversity_factor: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Diversity vs relevance trade-off (0.0=max diversity, 1.0=max relevance)"
+    )
+    deduplication_threshold: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for deduplication (0.9=90% similar considered duplicate)"
+    )
+    enable_query_expansion: bool = Field(
+        default=False,
+        description="Enable automatic query expansion"
+    )
+    expansion_methods: List[str] = Field(
+        default=["synonyms"],
+        description="Methods to use for expansion: synonyms|llm|pseudo_relevance"
+    )
+    max_expansion_variants: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of query variants to generate"
     )
 
 

@@ -10,6 +10,7 @@ from pgvector.psycopg import register_vector
 import logging
 
 from agrag.config import settings
+from agrag.storage.retry_decorators import resilient_db_operation
 from agrag.kg.ontology import POSTGRESQL_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,7 @@ class PostgresClient:
 
         logger.info("PostgreSQL schema setup complete")
 
+    @resilient_db_operation
     def insert_document_chunk(
         self,
         chunk_id: str,
@@ -171,6 +173,7 @@ class PostgresClient:
                 raise RuntimeError("Insert failed: no result returned")
             return result["chunk_id"]
 
+    @resilient_db_operation
     def vector_search(
         self,
         query_embedding: List[float],
@@ -230,6 +233,7 @@ class PostgresClient:
                 self.conn.rollback()
             raise e
 
+    @resilient_db_operation
     def keyword_search(
         self,
         query: str,
@@ -293,6 +297,7 @@ class PostgresClient:
                 self.conn.rollback()
             raise e
 
+    @resilient_db_operation
     def hybrid_search(
         self,
         query: str,
