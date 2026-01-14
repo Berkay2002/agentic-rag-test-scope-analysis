@@ -245,8 +245,11 @@ class QueryExpansionService:
             methods = ["synonyms"]  # Default
 
         max_exp = max_expansions or settings.max_query_expansions
+        if max_exp <= 1:
+            return [query]
+
         seen = {query}
-        result = [query]
+        per_method_expansions: List[List[str]] = []
 
         for method in methods:
             if method not in self.strategies:
@@ -257,12 +260,25 @@ class QueryExpansionService:
                 logging.error(f"Query expansion failed for method {method}: {e}")
                 continue
 
+            filtered = []
             for expansion in expansions:
                 if expansion in seen:
                     continue
                 seen.add(expansion)
-                result.append(expansion)
-                if len(result) >= max_exp:
-                    return result
+                filtered.append(expansion)
+            if filtered:
+                per_method_expansions.append(filtered)
+
+        result = [query]
+        round_index = 0
+        while len(result) < max_exp and per_method_expansions:
+            added_any = False
+            for expansions in per_method_expansions:
+                if round_index < len(expansions) and len(result) < max_exp:
+                    result.append(expansions[round_index])
+                    added_any = True
+            if not added_any:
+                break
+            round_index += 1
 
         return result
