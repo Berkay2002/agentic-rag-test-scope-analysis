@@ -219,10 +219,11 @@ def process_search_results(
         raw_results: List of raw result dictionaries from the database
         score_field: Name of the score field in raw results (e.g., "similarity", "rrf_score")
         source_name: Name of the search source (e.g., "pgvector", "hybrid")
-        score_filter_fn: Optional function to filter results by score, takes (score) -> bool
+        score_filter_fn: Optional function that takes a score (float) and returns True to keep
+            the result or False to filter it out. Example: lambda s: s >= 0.5
 
     Returns:
-        List of SearchResult objects
+        List of SearchResult objects (filtered if score_filter_fn provided)
     """
     from agrag.tools.schemas import SearchResult
 
