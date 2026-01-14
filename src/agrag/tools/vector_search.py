@@ -13,8 +13,7 @@ from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchRes
 from agrag.tools.base import (
     BaseToolWrapper,
     format_search_output,
-    build_metadata_with_chunk_id,
-    extract_score_or_default,
+    process_search_results,
 )
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
@@ -98,27 +97,18 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
                 metadata_filter=metadata_filter,
             )
 
-            # Format results
-            search_results = []
-            for result in results:
-                # Handle None similarity value - use 0.0 as fallback
-                score = extract_score_or_default(result.get("similarity"))
+            # Format results using shared processing logic
+            # Apply similarity threshold filter if provided
+            score_filter_fn = None
+            if similarity_threshold is not None:
+                score_filter_fn = lambda score: score >= similarity_threshold
 
-                if similarity_threshold is not None and score < similarity_threshold:
-                    continue
-
-                metadata = build_metadata_with_chunk_id(
-                    result.get("metadata", {}), result.get("chunk_id")
-                )
-
-                search_result = SearchResult(
-                    id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
-                    content=result.get("content", ""),
-                    score=score,
-                    metadata=metadata,
-                    source="pgvector",
-                )
-                search_results.append(search_result)
+            search_results = process_search_results(
+                raw_results=results,
+                score_field="similarity",
+                source_name="pgvector",
+                score_filter_fn=score_filter_fn,
+            )
 
             retrieval_time_ms = (time.time() - start_time) * 1000
 

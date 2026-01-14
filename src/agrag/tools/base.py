@@ -206,3 +206,49 @@ def format_search_output(
 
     return header + "\n".join(result_items) + footer
 
+
+def process_search_results(
+    raw_results: List[dict],
+    score_field: str,
+    source_name: str,
+    score_filter_fn: Optional[callable] = None,
+) -> List[Any]:
+    """Process raw search results into SearchResult objects.
+
+    Args:
+        raw_results: List of raw result dictionaries from the database
+        score_field: Name of the score field in raw results (e.g., "similarity", "rrf_score")
+        source_name: Name of the search source (e.g., "pgvector", "hybrid")
+        score_filter_fn: Optional function to filter results by score, takes (score) -> bool
+
+    Returns:
+        List of SearchResult objects
+    """
+    from agrag.tools.schemas import SearchResult
+
+    search_results = []
+    for result in raw_results:
+        # Extract score with fallback to 0.0
+        score = extract_score_or_default(result.get(score_field))
+
+        # Apply score filter if provided
+        if score_filter_fn and not score_filter_fn(score):
+            continue
+
+        # Build metadata including chunk_id if present
+        metadata = build_metadata_with_chunk_id(
+            result.get("metadata", {}), result.get("chunk_id")
+        )
+
+        # Create SearchResult object
+        search_result = SearchResult(
+            id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
+            content=result.get("content", ""),
+            score=score,
+            metadata=metadata,
+            source=source_name,
+        )
+        search_results.append(search_result)
+
+    return search_results
+

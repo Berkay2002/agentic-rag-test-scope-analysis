@@ -16,8 +16,7 @@ from agrag.tools.schemas import HybridSearchInput, HybridSearchOutput, SearchRes
 from agrag.tools.base import (
     BaseToolWrapper,
     format_search_output,
-    build_metadata_with_chunk_id,
-    extract_score_or_default,
+    process_search_results,
 )
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
@@ -106,24 +105,12 @@ def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
                 metadata_filter=metadata_filter if metadata_filter else None,
             )
 
-            # Format results
-            search_results = []
-            for result in results:
-                # Handle None rrf_score value - use 0.0 as fallback
-                score = extract_score_or_default(result.get("rrf_score"))
-
-                metadata = build_metadata_with_chunk_id(
-                    result.get("metadata", {}), result.get("chunk_id")
-                )
-
-                search_result = SearchResult(
-                    id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
-                    content=result.get("content", ""),
-                    score=score,
-                    metadata=metadata,
-                    source="hybrid",
-                )
-                search_results.append(search_result)
+            # Format results using shared processing logic
+            search_results = process_search_results(
+                raw_results=results,
+                score_field="rrf_score",
+                source_name="hybrid",
+            )
 
             retrieval_time_ms = (time.time() - start_time) * 1000
 
