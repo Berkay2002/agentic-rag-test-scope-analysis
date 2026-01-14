@@ -41,21 +41,13 @@ def test_parameter_override_and_restore():
     print(f"  enable_pii_detection: {settings.enable_pii_detection}")
 
     # Verify restoration
-    success = True
-    if settings.max_tool_calls != original_max_tool_calls:
-        print("❌ max_tool_calls not restored!")
-        success = False
-    if settings.agent_temperature != original_agent_temperature:
-        print("❌ agent_temperature not restored!")
-        success = False
-    if settings.enable_pii_detection != original_enable_pii_detection:
-        print("❌ enable_pii_detection not restored!")
-        success = False
+    assert settings.max_tool_calls == original_max_tool_calls, "max_tool_calls not restored!"
+    assert settings.agent_temperature == original_agent_temperature, "agent_temperature not restored!"
+    assert (
+        settings.enable_pii_detection == original_enable_pii_detection
+    ), "enable_pii_detection not restored!"
 
-    if success:
-        print("\n✅ All settings restored correctly!")
-
-    return success
+    print("\n✅ All settings restored correctly!")
 
 
 def test_parameter_filtering():
@@ -64,6 +56,7 @@ def test_parameter_filtering():
 
     # Test with reserved parameters that should be ignored
     original_debug = settings.debug
+    original_max_tool_calls = settings.max_tool_calls
 
     try:
         exit_code = run_headless(
@@ -86,29 +79,22 @@ def test_parameter_filtering():
     print(f"\nDebug setting after execution: {settings.debug}")
     print(f"Max tool calls after execution: {settings.max_tool_calls}")
 
-    if settings.debug != original_debug:
-        print("❌ Reserved parameter 'debug' was not filtered!")
-        return False
-    elif settings.max_tool_calls == 8:
-        print("✅ Non-reserved parameter was applied correctly!")
-        return True
-    else:
-        print("❌ Non-reserved parameter was not applied!")
-        return False
+    assert settings.debug == original_debug, "Reserved parameter 'debug' was not filtered!"
+    assert (
+        settings.max_tool_calls == original_max_tool_calls
+    ), "max_tool_calls was not restored after execution!"
+
+    print("✅ Reserved parameters filtered and settings restored correctly!")
 
 
 if __name__ == "__main__":
     print("Testing parameter handling in headless mode...\n")
 
-    success1 = test_parameter_override_and_restore()
-    success2 = test_parameter_filtering()
-
-    # Restore settings to original values
-    settings.max_tool_calls = 35  # Default value
-    settings.agent_temperature = 1.0  # Default value
-    settings.enable_pii_detection = True  # Default value
-
-    if success1 and success2:
-        print("\n✅ All tests passed!")
-    else:
+    try:
+        test_parameter_override_and_restore()
+        test_parameter_filtering()
+    except AssertionError:
         print("\n❌ Some tests failed!")
+        raise
+    else:
+        print("\n✅ All tests passed!")

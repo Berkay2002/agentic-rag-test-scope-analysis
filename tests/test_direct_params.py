@@ -88,27 +88,20 @@ def test_parameter_logic():
     print(f"  enable_pii_detection: {settings.enable_pii_detection}")
 
     # Verify restoration
-    success = True
-    if settings.max_tool_calls != original_max_tool_calls:
-        print("❌ max_tool_calls not restored!")
-        success = False
-    if settings.agent_temperature != original_agent_temperature:
-        print("❌ agent_temperature not restored!")
-        success = False
-    if settings.enable_pii_detection != original_enable_pii_detection:
-        print("❌ enable_pii_detection not restored!")
-        success = False
+    assert settings.max_tool_calls == original_max_tool_calls, "max_tool_calls not restored!"
+    assert settings.agent_temperature == original_agent_temperature, "agent_temperature not restored!"
+    assert (
+        settings.enable_pii_detection == original_enable_pii_detection
+    ), "enable_pii_detection not restored!"
 
-    if success:
-        print("\n✅ All settings restored correctly!")
-
-    return success
+    print("\n✅ All settings restored correctly!")
 
 
 if __name__ == "__main__":
-    success = test_parameter_logic()
-
-    if success:
-        print("\n✅ Parameter logic test passed!")
-    else:
+    try:
+        test_parameter_logic()
+    except AssertionError:
         print("\n❌ Parameter logic test failed!")
+        raise
+    else:
+        print("\n✅ Parameter logic test passed!")

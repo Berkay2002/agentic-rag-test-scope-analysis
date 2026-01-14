@@ -8,7 +8,7 @@ import csv
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from agrag.data.loaders.base import BaseLoader, Document
 from agrag.kg.ontology import TestType, NodeLabel, RelationshipType
@@ -37,14 +37,14 @@ class TGFTestRecord(BaseModel):
     tags: List[str] = Field(default_factory=list, description="Additional test tags")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    @validator("requirement_ids", "function_names", "tags", pre=True)
+    @field_validator("requirement_ids", "function_names", "tags", mode="before")
     def parse_semicolon_list(cls, v):
         """Parse semicolon-separated strings into lists."""
         if isinstance(v, str):
             return [item.strip() for item in v.split(";") if item.strip()]
         return v or []
 
-    @validator("test_type")
+    @field_validator("test_type")
     def normalize_test_type(cls, v):
         """Normalize test type to standard values."""
         type_mapping = {
@@ -59,7 +59,7 @@ class TGFTestRecord(BaseModel):
         }
         return type_mapping.get(v.lower(), v.lower())
 
-    @validator("result")
+    @field_validator("result")
     def normalize_result(cls, v):
         """Normalize test result values."""
         result_mapping = {
@@ -190,7 +190,11 @@ class TGFCSVLoader(BaseLoader):
             ),
             priority=row.get("priority", "medium"),
             tags=row.get("tags", ""),
-            metadata={k: v for k, v in row.items() if k not in TGFTestRecord.__fields__ and v},
+            metadata={
+                k: v
+                for k, v in row.items()
+                if k not in TGFTestRecord.model_fields and v
+            },
         )
 
     def _create_documents(self) -> List[Document]:

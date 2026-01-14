@@ -2,10 +2,12 @@
 """Test script for batch processor with parameters."""
 
 import asyncio
+import pytest
 from agrag.cli.batch_processor import BatchProcessor
 from agrag.config import settings
 
 
+@pytest.mark.asyncio
 async def test_batch_with_params():
     """Test batch processing with parameters."""
     print("Testing batch processor with params...")
@@ -66,6 +68,7 @@ async def test_batch_with_params():
             print(f"    Execution time: {result.execution_time_ms:.2f}ms")
 
 
+@pytest.mark.asyncio
 async def test_batch_with_different_params():
     """Test that different queries can have different parameters."""
     print("\nTesting batch with per-query parameters...")

@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -21,7 +23,7 @@ def test_tgf_loader():
 
     if not csv_path.exists():
         print(f"✗ Sample CSV not found: {csv_path}")
-        return False
+        pytest.skip("Sample CSV not found")
 
     print(f"\n[1] Loading CSV: {csv_path.name}")
 
@@ -36,7 +38,7 @@ def test_tgf_loader():
         import traceback
 
         traceback.print_exc()
-        return False
+        pytest.fail("Loading failed")
 
     # Display statistics
     print("\n[2] Statistics")
@@ -93,9 +95,12 @@ def test_tgf_loader():
     print("✓ All tests passed!")
     print("=" * 60)
 
-    return True
+    assert True
 
 
 if __name__ == "__main__":
-    success = test_tgf_loader()
-    sys.exit(0 if success else 1)
+    try:
+        test_tgf_loader()
+    except Exception:
+        sys.exit(1)
+    sys.exit(0)

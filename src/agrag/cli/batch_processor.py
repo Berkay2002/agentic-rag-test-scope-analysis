@@ -41,6 +41,7 @@ class BatchProcessingReport:
     start_time: str
     end_time: str
     parameters: Dict[str, Any]
+    thread_id: Optional[str] = None
 
 
 class BatchQueryProcessor:
@@ -217,6 +218,35 @@ class BatchQueryProcessor:
             end_time=end_time,
             parameters=self.default_params,
         )
+
+
+class BatchProcessor(BatchQueryProcessor):
+    """Batch processor with thread tracking and convenience helpers."""
+
+    def __init__(
+        self,
+        thread_id: Optional[str] = None,
+        max_concurrent: int = 1,
+        default_params: Optional[Dict[str, Any]] = None,
+        output_format: str = "json",
+    ) -> None:
+        default_params = dict(default_params or {})
+        if thread_id:
+            default_params.setdefault("thread_id", thread_id)
+        resolved_output_format = default_params.pop("output_format", output_format)
+        super().__init__(output_format=resolved_output_format, **default_params)
+        self.thread_id = thread_id
+        self.max_concurrent = max_concurrent
+
+    def save_results(self, output_path: Union[str, Path], format: str = "json") -> None:
+        """Persist current results to disk."""
+        save_results_to_file(self.results, output_path, format=format)
+
+    def generate_report(self) -> BatchProcessingReport:
+        """Generate a summary report including the thread id."""
+        report = super().generate_report()
+        report.thread_id = self.thread_id
+        return report
 
 
 def load_queries_from_file(file_path: Union[str, Path]) -> List[Union[str, Dict[str, Any]]]:
