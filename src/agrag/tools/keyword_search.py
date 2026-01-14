@@ -15,11 +15,8 @@ from langchain_core.tools import tool
 from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
 from agrag.tools.base import (
     BaseToolWrapper,
-    format_search_results_header,
-    format_search_result_item,
-    format_search_results_footer,
-    build_metadata_with_chunk_id,
-    extract_score_or_default,
+    format_search_output,
+    process_search_results,
 )
 from agrag.storage import PostgresClient
 
@@ -35,37 +32,12 @@ def _format_keyword_output(output: KeywordSearchOutput) -> str:
     Returns:
         Formatted string
     """
-    if not output.results:
-        return f"No results found for query: '{output.query}'"
-
-    # Build header
-    header = format_search_results_header(
-        query=output.query,
-        total_results=output.total_results,
-        retrieval_time_ms=output.retrieval_time_ms,
+    return format_search_output(
+        output=output,
         search_type="Keyword Search",
+        score_label="FTS Rank",
+        footer_note="Note: Uses pg_search extension with true BM25 ranking (ParadeDB).",
     )
-
-    # Format each result
-    result_items = []
-    for i, result in enumerate(output.results, 1):
-        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
-        item = format_search_result_item(
-            index=i,
-            result_id=result.id,
-            score=result.score,
-            score_label="FTS Rank",
-            content=result.content,
-            entity_type=entity_type,
-        )
-        result_items.append(item)
-
-    # Add footer note
-    footer = format_search_results_footer(
-        "Note: Uses pg_search extension with true BM25 ranking (ParadeDB)."
-    )
-
-    return header + "\n".join(result_items) + footer
 
 
 def create_keyword_search_tool(postgres_client: Optional[PostgresClient] = None):
@@ -118,24 +90,12 @@ def create_keyword_search_tool(postgres_client: Optional[PostgresClient] = None)
                 metadata_filter=metadata_filter if metadata_filter else None,
             )
 
-            # Format results
-            search_results = []
-            for result in results:
-                # Handle None score from paradedb.score() - use 0.0 as fallback
-                score = extract_score_or_default(result.get("rank"))
-
-                metadata = build_metadata_with_chunk_id(
-                    result.get("metadata", {}), result.get("chunk_id")
-                )
-
-                search_result = SearchResult(
-                    id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
-                    content=result.get("content", ""),
-                    score=score,
-                    metadata=metadata,
-                    source="postgres_fts",
-                )
-                search_results.append(search_result)
+            # Format results using shared processing logic
+            search_results = process_search_results(
+                raw_results=results,
+                score_field="rank",
+                source_name="postgres_fts",
+            )
 
             retrieval_time_ms = (time.time() - start_time) * 1000
 
