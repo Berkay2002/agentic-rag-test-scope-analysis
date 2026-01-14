@@ -29,6 +29,7 @@ from agrag.cli.display import (
     print_tool_call,
 )
 from agrag.cli.hitl import HITLHandler
+from agrag.cli.utils import extract_message_content
 from agrag.config import settings
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
@@ -437,33 +438,13 @@ class InteractiveChat:
 
         elif isinstance(last_message, AIMessage) and last_message.content:
             result["model_calls"] = 1
-            result["answer"] = self._extract_content(last_message.content)
+            result["answer"] = extract_message_content(last_message.content)
             self._log_event({"type": "assistant", "content": result["answer"]})
             status.update("[bold blue]Agent is reasoning...")
 
         return result
 
-    def _extract_content(self, content: Any) -> str:
-        """Extract text content from message content.
-
-        Args:
-            content: Message content (string or list of blocks).
-
-        Returns:
-            Extracted text content.
-        """
-        if isinstance(content, str):
-            return content
-        elif isinstance(content, list):
-            # Handle content blocks (Gemini format)
-            text_parts = []
-            for part in content:
-                if isinstance(part, dict) and "text" in part:
-                    text_parts.append(part["text"])
-                elif isinstance(part, str):
-                    text_parts.append(part)
-            return "\n".join(text_parts)
-        return str(content)
+    # Content extraction is now handled by agrag.cli.utils.extract_message_content
 
     def run(self) -> None:
         """Run the interactive chat loop."""
