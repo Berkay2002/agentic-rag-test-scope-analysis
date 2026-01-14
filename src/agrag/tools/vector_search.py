@@ -10,6 +10,14 @@ import logging
 from langchain_core.tools import tool
 
 from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
+from agrag.tools.base import (
+    BaseToolWrapper,
+    format_search_results_header,
+    format_search_result_item,
+    format_search_results_footer,
+    build_metadata_with_chunk_id,
+    extract_score_or_default,
+)
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
 from agrag.kg.ontology import NodeLabel
@@ -29,21 +37,29 @@ def _format_vector_output(output: VectorSearchOutput) -> str:
     if not output.results:
         return f"No results found for query: '{output.query}'"
 
-    lines = [
-        f"Vector Search Results (found {output.total_results} items in {output.retrieval_time_ms:.2f}ms):",
-        f"Query: {output.query}",
-        "",
-    ]
+    # Build header
+    header = format_search_results_header(
+        query=output.query,
+        total_results=output.total_results,
+        retrieval_time_ms=output.retrieval_time_ms,
+        search_type="Vector Search",
+    )
 
+    # Format each result
+    result_items = []
     for i, result in enumerate(output.results, 1):
-        lines.append(f"{i}. Entity ID: {result.id} (Similarity: {result.score:.4f})")
-        lines.append(f"   Snippet: {result.content[:200]}...")
-        if result.metadata:
-            entity_type = result.metadata.get("entity_type", "Unknown")
-            lines.append(f"   Entity Type: {entity_type}")
-        lines.append("")
+        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
+        item = format_search_result_item(
+            index=i,
+            result_id=result.id,
+            score=result.score,
+            score_label="Similarity",
+            content=result.content,
+            entity_type=entity_type,
+        )
+        result_items.append(item)
 
-    return "\n".join(lines)
+    return header + "\n".join(result_items)
 
 
 def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
@@ -109,16 +125,14 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
             search_results = []
             for result in results:
                 # Handle None similarity value - use 0.0 as fallback
-                similarity = result.get("similarity")
-                score = float(similarity) if similarity is not None else 0.0
+                score = extract_score_or_default(result.get("similarity"))
 
                 if similarity_threshold is not None and score < similarity_threshold:
                     continue
 
-                metadata = result.get("metadata", {}) or {}
-                chunk_id = result.get("chunk_id")
-                if chunk_id:
-                    metadata = {**metadata, "chunk_id": chunk_id}
+                metadata = build_metadata_with_chunk_id(
+                    result.get("metadata", {}), result.get("chunk_id")
+                )
 
                 search_result = SearchResult(
                     id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
@@ -148,7 +162,7 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
 
 
 # For backwards compatibility, provide a class-based wrapper
-class VectorSearchTool:
+class VectorSearchTool(BaseToolWrapper):
     """Wrapper class for backwards compatibility.
 
     Use create_vector_search_tool() factory function for new code.
@@ -160,18 +174,5 @@ class VectorSearchTool:
         Args:
             postgres_client: PostgreSQL client instance (creates new if not provided)
         """
-        self._tool = create_vector_search_tool(postgres_client)
-
-    @property
-    def name(self) -> str:
-        return self._tool.name
-
-    @property
-    def description(self) -> str:
-        return self._tool.description
-
-    def invoke(self, *args, **kwargs):
-        return self._tool.invoke(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._tool, name)
+        tool = create_vector_search_tool(postgres_client)
+        super().__init__(tool)
