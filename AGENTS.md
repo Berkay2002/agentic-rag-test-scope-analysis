@@ -4,14 +4,9 @@
 
 **Agentic GraphRAG system** for test scope analysis in telecommunications software.
 
-**Stack:**
-- Python 3.11+, Poetry
-- LangGraph + LangChain
-- Google Gemini LLM
-- Neo4j (knowledge graph) + PostgreSQL/Neon (pgvector HNSW + pg_search BM25)
-- LangSmith tracing
+**Stack:** Python 3.11+, Poetry | LangGraph + LangChain | Google Gemini LLM | Neo4j + PostgreSQL/Neon (pgvector HNSW + pg_search BM25) | LangSmith
 
-**Architecture**: ReAct agent with 4 retrieval tools. Dual DB: PostgreSQL for retrieval, Neo4j for graph traversal.
+**Architecture**: ReAct agent with 4 retrieval tools operating on dual-database architecture (PostgreSQL for retrieval, Neo4j for graph traversal).
 
 ## Setup
 
@@ -21,9 +16,7 @@ cp .env.example .env  # Add API keys, DB creds
 poetry run agrag init  # Creates DB schemas, indexes
 ```
 
-**Required env vars:**
-- `GOOGLE_API_KEY`, `NEO4J_URI`, `NEO4J_PASSWORD`, `NEON_CONNECTION_STRING`
-- Optional: `LANGCHAIN_API_KEY` (for tracing)
+**Required env vars:** `GOOGLE_API_KEY`, `NEO4J_URI`, `NEO4J_PASSWORD`, `NEON_CONNECTION_STRING`
 
 **Generate data:**
 ```bash
@@ -60,682 +53,173 @@ poetry run agrag chat --thread-id my-session
 poetry run agrag chat --yolo
 
 # Headless (scripting)
-poetry run agrag -p "query here"
-poetry run agrag -p "query" --output-format json
-
-# Single query
-poetry run agrag query "your question"
-poetry run agrag query "q" --stream
+poetry run agrag -p "query here" --output-format json
+poetry run agrag query "your question" --stream
 poetry run agrag info  # Show config
 ```
 
 ### Chat Commands
-
 `/help`, `/clear`, `/history`, `/stats`, `/reset`, `/save`, `/export`, `/verbose`, `/thinking [preset]`, `/exit`
 
-### Chat Commands
-`/help`, `/clear`, `/history`, `/stats`, `/reset`, `/save`, `/export`, `/verbose`, `/thinking [preset]`, `/exit`
+### HITL (Human-in-the-Loop)
+
+**Safe mode** (default): Agent pauses before each tool. You approve, reject, or edit.
+
+**YOLO mode** (`--yolo`): Agent executes autonomously.
+
+**Example:**
+```
+You: What tests cover handover?
+🚦 Approval Required
+Agent wants: vector_search(query="handover tests", k=10)
+Approve? (yes/no/edit): yes
+✓ Approved. Executing...
+Agent Response: [answer]
+```
 
 ### Working with Data
 
 ```bash
-# Reset databases (WARNING: deletes all data)
-poetry run agrag reset
-
-# Generate fresh dataset
-poetry run agrag generate --requirements 30 --testcases 150 --output my_data.json
-
-# Ingest custom dataset
+poetry run agrag reset  # WARNING: deletes all data
+poetry run agrag generate --requirements 30 --testcases 150
 poetry run agrag ingest my_data.json
 ```
 
-## Testing Instructions
-
-### Running Tests
+## Testing
 
 ```bash
-# Run all tests
-poetry run pytest
-
-# Run specific test file
+poetry run pytest                           # All tests
 poetry run pytest tests/unit/test_vector_search.py
-
-# Run with coverage
 poetry run pytest --cov=agrag --cov-report=html
-
-# Run only unit tests
-poetry run pytest tests/unit/
-
-# Run only integration tests
-poetry run pytest tests/integration/
+poetry run black src/ tests/                # Format
+poetry run ruff check src/ tests/           # Lint
+poetry run ruff check --fix src/ tests/     # Fix auto-fixable
 ```
 
-### Test Structure
+**Test structure:** `tests/unit/`, `tests/integration/`, `tests/evaluation/`
 
-- `tests/unit/` - Unit tests for individual modules
-- `tests/integration/` - Integration tests with databases
-- `tests/evaluation/` - Evaluation framework tests
+## Code Style
 
-**Test File Naming**: Use `test_*.py` pattern (pytest convention)
-
-### Key Test Areas
-
-1. **Tool Execution**: Test each retrieval tool with mock database clients
-2. **Metric Calculations**: Verify Precision@k, Recall@k, MAP, MRR implementations
-3. **Ontology Validation**: Ensure entity/relationship schemas are consistent
-4. **Agent Workflow**: Test StateGraph execution with checkpointing
-5. **Data Ingestion**: Validate Postgres/BM25 writes and explicit Neo4j graph writes
-
-### Before Committing
-
-```bash
-# Format code
-poetry run black src/ tests/
-
-# Lint
-poetry run ruff check src/ tests/
-
-# Run full test suite
-poetry run pytest
-```
-
-## Code Style Guidelines
-
-### Python Style
-
-- **Formatter**: Black (line length: 100)
-- **Linter**: Ruff
-- **Type Hints**: Use throughout (no strict mypy enforcement yet)
-- **Docstrings**: Google-style docstrings for public APIs
-
-```bash
-# Auto-format code
-poetry run black src/
-
-# Check linting
-poetry run ruff check src/
-```
-
-### Project Conventions
-
-#### File Organization
-- One class per file (except small dataclasses)
-- Group related functions in modules
-- Use `__init__.py` for public API exports
-
-#### Import Order
-```python
-# Standard library
-import json
-from typing import Optional
-
-# Third-party
-from pydantic import BaseModel
-from langchain_core.tools import BaseTool
-
-# Local
-from agrag.storage import Neo4jClient
-from agrag.tools.schemas import VectorSearchInput
-```
-
-#### Naming Conventions
-- **Classes**: PascalCase (`VectorSearchTool`, `Neo4jClient`)
-- **Functions/Methods**: snake_case (`create_agent_graph`, `execute_tools`)
-- **Constants**: UPPER_SNAKE_CASE (`NEO4J_CONSTRAINTS`, `MAX_TOOL_CALLS`)
-- **Private**: Leading underscore (`_internal_helper`)
-
-#### LangGraph State Management
-- Use TypedDict for AgentState
-- Use `Annotated[list, add_messages]` for message history
-- Never mutate state directly; return updated values from node functions
-
-#### Database Clients
-- All database operations go through `Neo4jClient` or `PostgresClient`
-- Use connection pooling (built into drivers)
-- Always close connections in context managers or destructors
-- Use parameterized queries (never string interpolation)
-- Use `storage_writers` for ingestion (`PostgresWriter`/`BM25Writer` default, `GraphWriter` only when graph edges are intended)
-
-#### Tool Implementation
-- Inherit from `BaseTool` (LangChain)
-- Define Pydantic `args_schema` for inputs
-- Return structured data (Pydantic models preferred)
-- Include detailed descriptions for LLM tool selection
-- Handle errors gracefully (return error messages, don't raise)
+- **Black**: line length 100
+- **Ruff**: linting
+- **Imports**: stdlib → third-party → local
+- **Naming**: PascalCase classes, snake_case functions, UPPER_SNAKE_CASE constants
+- **LangGraph**: TypedDict state, never mutate directly
+- **DB clients**: Parameterized queries, context managers
+- **Tools**: Inherit BaseTool, Pydantic args_schema, handle errors gracefully
 
 ## Knowledge Graph Ontology
 
-### Entity Types
+**Entities** (`src/agrag/kg/ontology.py`):
+- ChangeRequest, File, Component
+- Requirement (priority, status)
+- TestCase (test_type, file_path)
+- Function (signature, file_path, line_number)
+- Class, Module (legacy optional)
 
-**Core entities** (defined in `src/agrag/kg/ontology.py`):
+**Relationships:**
+- `TOUCHES`: ChangeRequest → File
+- `DEFINED_IN`: Function → File
+- `PART_OF`: File → Component
+- `COVERS`: TestCase → Function
+- `VERIFIES`: TestCase → Requirement
 
-1. **ChangeRequest** - Change requests
-   - Properties: `id`, `title`, `description`, `status`, `embedding`
-
-2. **File** - Code files
-   - Properties: `id`, `path`, `language`, `component_id`, `embedding`
-
-3. **Component** - Subsystems/modules
-   - Properties: `id`, `name`, `description`, `embedding`
-
-4. **Requirement** - System requirements
-   - Properties: `id`, `priority`, `status`, `description`, `embedding`
-   
-5. **TestCase** - Test cases
-   - Properties: `id`, `test_type`, `file_path`, `expected_outcome`, `embedding`
-   
-6. **Function** - Code functions
-   - Properties: `id`, `signature`, `code_snippet`, `file_path`, `line_number`, `embedding`
-   
-7. **Class** - Code classes (legacy optional)
-   - Properties: `id`, `name`, `methods`, `file_path`, `embedding`
-   
-8. **Module** - Code modules/packages (legacy optional)
-   - Properties: `id`, `name`, `architectural_component`, `embedding`
-
-### Relationship Types
-
-1. `TOUCHES` - ChangeRequest → File (change impacts file)
-2. `DEFINED_IN` - Function → File (function location)
-3. `PART_OF` - File → Component (ownership)
-4. `COVERS` - TestCase → Function (test exercises code)
-5. `VERIFIES` - TestCase → Requirement (test validates requirement)
-6. Legacy optional: `CALLS`, `INHERITS_FROM`, `BELONGS_TO`, `DEPENDS_ON`, `TESTS`
-
-### Working with the Ontology
-
-When adding new entity types or relationships:
-
-1. Update `NodeLabel` and `RelationshipType` enums in `ontology.py`
-2. Add corresponding Neo4j constraint to `NEO4J_CONSTRAINTS`
-3. Add vector index if entity has embeddings
-4. Update PostgreSQL schema if needed for vector/FTS support
-5. Update data generators to produce the new entities
-6. Update retrieval tools if new query patterns are needed
+**Adding entities:** Update enums → Add Neo4j constraint → Add index → Update PostgreSQL → Update generators → Update tools
 
 ## Retrieval Tools
 
-The agent has access to 4 retrieval tools (defined in `src/agrag/tools/`):
+### Vector Search
+- **For**: Semantic queries
+- **Impl**: PostgreSQL pgvector (HNSW, cosine, 768-dim)
+- **Params**: query, k (10 default), node_type (filter)
 
-### 1. Vector Search (`vector_search`)
+### Keyword Search
+- **For**: Exact matches, identifiers
+- **Impl**: PostgreSQL pg_search BM25
+- **Params**: query, k, entity_type
 
-**Use for**: Semantic queries, conceptual understanding
+### Graph Traversal
+- **For**: Dependencies, multi-hop relationships
+- **Impl**: Cypher pattern matching
+- **Params**: start_node_id, start_node_label, relationship_types, depth (2), direction
 
-**Example queries**:
-- "tests related to handover failures"
-- "authentication requirements"
-- "functions dealing with network timeouts"
+### Hybrid Search
+- **For**: Complex queries (semantic + lexical)
+- **Impl**: PostgreSQL-native RRF fusion
+- **Params**: query, k, rrf_k (60), entity_type
 
-**Implementation**: PostgreSQL pgvector (HNSW index, cosine similarity, 768-dim)
+## Evaluation
 
-**Parameters**:
-- `query`: Search text
-- `k`: Number of results (default: 10)
-- `node_type`: Filter by entity type (optional)
+**Metrics** (`src/agrag/evaluation/metrics.py`):
+- Precision@k, Recall@k, F1@k
+- Average Precision, MAP
+- Reciprocal Rank, MRR
 
-### 2. Keyword Search (`keyword_search`)
-
-**Use for**: Exact matches, identifiers, error codes
-
-**Example queries**:
-- "TestLoginTimeout"
-- "REQ_AUTH_005"
-- "ERROR_E503"
-
-**Implementation**: PostgreSQL pg_search extension with true BM25 ranking (ParadeDB)
-
-Uses the `@@@` operator with `paradedb.score()` for relevance scoring.
-
-**Parameters**:
-- `query`: Search keywords
-- `k`: Number of results (default: 10)
-- `entity_type`: Filter by entity type (optional)
-
-### 3. Graph Traversal (`graph_traverse`)
-
-**Use for**: Structural dependencies, multi-hop relationships
-
-**Example queries**:
-- "all tests covering functions called by UserManager"
-- "requirements depending on REQ_HANDOVER_001"
-- "classes defined in network_module"
-
-**Implementation**: Cypher pattern matching with depth limits
-
-**Parameters**:
-- `start_node_id`: Starting node ID
-- `start_node_label`: Starting node type (e.g., "Requirement")
-- `relationship_types`: List of relationship types to traverse
-- `depth`: Maximum traversal depth (default: 2)
-- `direction`: "outgoing", "incoming", or "both"
-
-### 4. Hybrid Search (`hybrid_search`)
-
-**Use for**: Complex queries needing semantic + lexical precision
-
-**Example queries**:
-- "tests for LTE signaling with timeout errors"
-- "handover functions with retry logic"
-
-**Implementation**: PostgreSQL-native RRF fusion combining:
-- pgvector HNSW similarity search
-- pg_search BM25 keyword search
-
-Uses Reciprocal Rank Fusion (RRF) to merge results from both retrieval methods.
-
-**Parameters**:
-- `query`: Search text
-- `k`: Number of results (default: 10)
-- `rrf_k`: RRF smoothing constant (default: 60)
-- `entity_type`: Filter by entity type (optional)
-
-## Evaluation Framework
-
-Located in `src/agrag/evaluation/metrics.py`:
-
-### Available Metrics
-
-- `precision_at_k(retrieved, relevant, k)` - Precision@k
-- `recall_at_k(retrieved, relevant, k)` - Recall@k
-- `f1_score_at_k(retrieved, relevant, k)` - F1@k
-- `average_precision(retrieved, relevant)` - Average Precision
-- `mean_average_precision(results)` - MAP across queries
-- `reciprocal_rank(retrieved, relevant)` - Reciprocal Rank
-- `mean_reciprocal_rank(results)` - MRR across queries
-- `evaluate_retrieval(retrieved, relevant, k_values)` - All metrics at once
-
-### Running Evaluations
-
+**Run eval:**
 ```bash
-# Run evaluation on dataset
-poetry run agrag evaluate --dataset data/eval_queries.json --output results.json --k-values "1,3,5,10"
+poetry run agrag evaluate \
+  --dataset data/eval_queries.json \
+  --output results.json \
+  --k-values "1,3,5,10"
 ```
 
-**Evaluation dataset format** (`eval_queries.json`):
+**Dataset format:**
 ```json
-[
-  {
-    "query": "tests for handover timeout",
-    "relevant_ids": ["TC_HANDOVER_001", "TC_HANDOVER_003", "TC_TIMEOUT_012"]
-  },
-  {
-    "query": "authentication requirements",
-    "relevant_ids": ["REQ_AUTH_001", "REQ_AUTH_005"]
-  }
-]
+[{"query": "tests for handover", "relevant_ids": ["TC_001", "TC_003"]}]
 ```
 
-### Creating Test Queries
+## Observability
 
-When creating evaluation datasets:
-1. Use diverse query types (semantic, structural, hybrid)
-2. Include 3-10 relevant items per query
-3. Cover different entity types (requirements, tests, functions)
-4. Include edge cases (no results, ambiguous queries)
-5. Balance easy and hard queries
+**LangSmith**: Full tracing of LLM calls, tool execution, state transitions, errors
 
-## Build and Deployment
-
-### Local Development
-
+**Logging** (`src/agrag/config/logging_config.py`):
 ```bash
-# Install in development mode
-poetry install
-
-# Activate virtual environment
-poetry shell
-
-# Run CLI directly
-agrag query "your question here"
-```
-
-### Package Building
-
-```bash
-# Build wheel and sdist
-poetry build
-
-# Output in dist/
-ls dist/
-# agrag-0.1.0-py3-none-any.whl
-# agrag-0.1.0.tar.gz
-```
-
-### Environment-Specific Configuration
-
-The system uses Pydantic Settings with environment variable priority:
-
-1. Environment variables (highest priority)
-2. `.env` file
-3. Default values in `settings.py`
-
-**For production**:
-- Set `LANGCHAIN_TRACING_V2=false` (unless using LangSmith)
-- Use connection pooling for databases
-- Set `MAX_TOOL_CALLS` and `MAX_MODEL_CALLS` for cost control
-- Use `AGENT_TEMPERATURE=0.0` for deterministic behavior
-
-### Database Setup
-
-**Neo4j** (use Neo4j Aura for cloud):
-1. Create database instance
-2. Enable APOC plugin (for advanced operations)
-3. Note connection URI and password
-4. Run `agrag init` to create schema
-
-**PostgreSQL** (use Neon for serverless):
-1. Create database instance (AWS region required for pg_search)
-2. Ensure PostgreSQL 17+ with pgvector and pg_search extensions
-3. Note connection string
-4. Run `agrag init` to create schema (pgvector HNSW + pg_search BM25 indexes)
-
-## Human-in-the-Loop (HITL) Workflows
-
-The agent uses HITL by default for safety - you approve each action before it executes.
-
-### Understanding Modes
-
-**Safe Mode (Default - HITL Enabled):**
-```bash
-poetry run agrag chat
-```
-- Agent proposes tool calls and pauses
-- You review what the agent wants to do
-- You approve, reject, or modify the action
-- Agent executes only after your approval
-- ✅ Best for: normal usage, learning, cost control, sensitive operations
-
-**YOLO Mode (Autonomous):**
-```bash
-poetry run agrag chat --yolo
-```
-- Agent executes all tool calls autonomously
-- No approval prompts - agent decides everything
-- Faster workflow but less control
-- ⚠️ Best for: trusted workflows, demos, when you're very confident
-
-### How HITL Works
-
-**Default behavior (Safe Mode):**
-1. You ask a question
-2. Agent analyzes and decides which tools to use
-3. **Agent pauses** and shows: "I want to execute vector_search with parameters X"
-4. You review the proposed action
-5. You respond: approve (yes), reject (no), or edit parameters
-6. Agent executes (if approved) or stops (if rejected)
-7. Process repeats for each tool call
-
-### Example HITL Session
-
-```
-You: Find tests for authentication timeout
-
-🚦 Approval Required
-
-The agent wants to execute the following tools:
-- vector_search(query="authentication timeout tests", k=10)
-
-Approve? (yes/no/edit): yes
-✓ Approved. Continuing...
-
-🔧 Executing: vector_search
-📝 Found 8 results...
-
-🚦 Approval Required
-
-The agent wants to execute the following tools:
-- graph_traverse(start_node="REQ_AUTH_005", relationship="VERIFIES")
-
-Approve? (yes/no/edit): yes
-✓ Approved. Continuing...
-
-Agent Response: [complete answer]
-```
-
-### When to Use Each Mode
-
-**Use Safe Mode (default) when:**
-- You're exploring new queries
-- Working with real/production data
-- Learning how the agent works
-- Controlling costs (LLM API calls)
-- You want full visibility and control
-
-**Use YOLO Mode (`--yolo`) when:**
-- You trust the agent completely for this task
-- Running demos or presentations
-- Doing batch processing with known patterns
-- Speed is more important than control
-
-### Implementation Details
-
-**Checkpointer**: PostgresSaver stores agent state in PostgreSQL
-**Interrupts**: Configured with `interrupt_before=["execute_tools"]`
-**State Recovery**: Can resume from any checkpoint using thread ID
-**Persistence**: All conversation history and tool results saved
-
-### Programmatic HITL
-
-```python
-from langgraph.checkpoint.postgres import PostgresSaver
-from agrag.core import create_agent_graph, create_initial_state
-
-# Create graph with checkpointing
-checkpointer = PostgresSaver.from_conn_string(conn_string)
-graph = create_agent_graph(checkpointer=checkpointer)
-
-# Run with thread
-config = {"configurable": {"thread_id": "session-123"}}
-for event in graph.stream(initial_state, config):
-    if "__interrupt__" in event:
-        # Review proposed tool calls
-        proposed_calls = event["execute_tools"]["messages"][-1].tool_calls
-        
-        # Options:
-        # 1. Approve: graph.update_state(config, None)
-        # 2. Edit: graph.update_state(config, modified_calls)
-        # 3. Reject: graph.update_state(config, {"messages": [...]})
-```
-
-## Observability and Debugging
-
-### LangSmith Integration
-
-Automatic tracing when configured:
-- Every LLM call (reasoning steps)
-- Every tool execution (inputs/outputs)
-- Graph state transitions
-- Retrieval results with scores
-- Error traces
-
-**View traces**: https://smith.langchain.com/
-
-### Logging
-
-Structured logging configured in `src/agrag/config/logging_config.py`:
-
-```bash
-# Set log level
 poetry run agrag --log-level DEBUG query "..."
-
-# JSON format for log aggregation
 poetry run agrag --log-format json query "..."
 ```
 
-**Log locations**:
-- Console: Formatted output (default: INFO)
-- File: `logs/agrag.log` (if configured)
-
-### Debugging Agent Behavior
-
-1. **Enable streaming**: `--stream` flag shows real-time agent reasoning
-2. **Check LangSmith**: View full execution traces
-3. **Inspect state**: Use `--checkpoint` to save/inspect agent state
-4. **Tool debugging**: Check tool inputs/outputs in logs
-5. **Database debugging**: Query Neo4j/PostgreSQL directly to verify data
-
-### Common Issues
-
-**Issue**: Agent makes too many tool calls
-- **Fix**: Reduce `MAX_TOOL_CALLS` in `.env`
-- **Check**: LangSmith trace for reasoning loops
-
-**Issue**: Poor retrieval results
-- **Fix**: Check embedding quality, adjust similarity thresholds
-- **Check**: Database has sufficient data, indexes are created
-
-**Issue**: Database connection errors
-- **Fix**: Verify connection strings in `.env`
-- **Check**: Database instances are running and accessible
-
-## Research Questions Alignment
-
-This project addresses three research questions:
-
-### RQ1: Knowledge Graph Ontology
-**Implementation**: `src/agrag/kg/ontology.py`
-- 5 entity types, 6 relationship types
-- Optimized for software engineering domain
-- Vector embeddings for all entities
-
-### RQ2: Retrieval Strategy Comparison
-**Implementation**: `src/agrag/tools/` + `src/agrag/evaluation/`
-- 4 retrieval strategies (vector, keyword, graph, hybrid)
-- Evaluation metrics (Precision@k, Recall@k, MAP, MRR)
-- Baseline comparison framework
-
-### RQ3: Human-in-the-Loop Workflows
-**Implementation**: `src/agrag/core/graph.py` + LangGraph checkpointing
-- PostgresSaver for state persistence
-- Interrupt points for human approval
-- Thread-based conversation management
+**Common issues:**
+- Too many tool calls → Reduce `MAX_TOOL_CALLS` in `.env`
+- Poor retrieval → Check embeddings, indexes, data volume
+- DB connection errors → Verify `.env` connection strings
 
 ## Development Tips
 
-### Fast Iteration
-
-```bash
-# Use Python's `-m` flag for quick testing
-poetry run python -m agrag.tools.vector_search
-
-# Or enter Poetry shell
-poetry shell
-python -m agrag.tools.vector_search
-```
-
-### Database Inspection
-
-**Neo4j Browser**: http://localhost:7474 (or Aura console)
-
+**Database inspection:**
 ```cypher
-// Count all entities
+// Neo4j
 MATCH (n) RETURN labels(n)[0] as type, count(*) as count
-
-// Sample requirements
-MATCH (r:Requirement) RETURN r LIMIT 10
-
-// Find test coverage
 MATCH (t:TestCase)-[:VERIFIES]->(r:Requirement)
 RETURN r.id, collect(t.id) as tests
-```
 
-**PostgreSQL queries**:
-```sql
--- Count chunks
+-- PostgreSQL
 SELECT COUNT(*) FROM document_chunks;
-
--- Vector similarity search (pgvector)
-SELECT chunk_id, content, embedding <=> '[0.1, 0.2, ...]'::vector AS distance
-FROM document_chunks
-ORDER BY distance
-LIMIT 10;
-
--- BM25 keyword search (pg_search)
-SELECT chunk_id, content, paradedb.score(id) AS bm25_score
-FROM document_chunks
-WHERE content @@@ 'handover'
-ORDER BY paradedb.score(id) DESC
-LIMIT 10;
+SELECT chunk_id, content, embedding <=> '[...]'::vector AS distance FROM document_chunks ORDER BY distance LIMIT 10;
+SELECT chunk_id, content, paradedb.score(id) FROM document_chunks WHERE content @@@ 'handover' ORDER BY paradedb.score(id) DESC LIMIT 10;
 ```
 
-### Modifying the Agent
-
-**To change system prompt**: Edit `src/agrag/core/graph.py`, function `create_agent_graph()`
-
-**To add a tool**:
-1. Create tool class in `src/agrag/tools/`
-2. Define Pydantic schema in `src/agrag/tools/schemas.py`
-3. Add to tool list in `create_agent_graph()`
-
-**To modify state**:
-1. Update `AgentState` in `src/agrag/core/state.py`
-2. Update node functions in `src/agrag/core/nodes.py`
-
-### Performance Optimization
-
-- **Batch embedding generation**: Use `EmbeddingService.embed_batch()`
-- **Connection pooling**: Clients reuse connections
-- **Vector index**: HNSW provides O(log N) search
-- **Cypher optimization**: Use EXPLAIN/PROFILE for query optimization
-
-## Additional Resources
-
-- **LangChain Docs**: https://python.langchain.com/
-- **LangGraph Docs**: https://langchain-ai.github.io/langgraph/
-- **Neo4j Cypher**: https://neo4j.com/docs/cypher-manual/
-- **pgvector**: https://github.com/pgvector/pgvector
-- **pg_search (ParadeDB)**: https://docs.paradedb.com/ and https://neon.com/docs/extensions/pg_search
-- **LangSmith**: https://smith.langchain.com/
-
-## Contributing
-
-When making changes:
-
-1. **Create feature branch**: `git checkout -b feature/your-feature`
-2. **Run tests**: `poetry run pytest`
-3. **Format code**: `poetry run black src/ tests/`
-4. **Lint**: `poetry run ruff check src/ tests/`
-5. **Update docs**: If adding features, update README.md and this file
-6. **Commit**: Use clear commit messages
-7. **Test end-to-end**: Run full query workflow before pushing
+**Modifying the agent:**
+- Change system prompt → Edit `src/agrag/core/graph.py`
+- Add a tool → Create in `src/agrag/tools/` → Define schema in `schemas.py` → Add to tool list in `create_agent_graph()`
+- Modify state → Update `AgentState` in `src/agrag/core/state.py` → Update nodes in `nodes.py`
 
 ## Quick Reference
 
-### Most Common Commands
-
+**Most common commands:**
 ```bash
-# Setup
-poetry install
-cp .env.example .env
-poetry run agrag init
-
-# Data
-poetry run agrag generate
-poetry run agrag ingest data/synthetic_dataset.json
-
-# Usage - Interactive Chat (Recommended)
-poetry run agrag chat              # Safe mode (approve each tool)
-poetry run agrag chat --yolo       # YOLO mode (autonomous)
-
-# Usage - Single Queries
+poetry install && cp .env.example .env && poetry run agrag init
+poetry run agrag generate && poetry run agrag ingest data/synthetic_dataset.json
+poetry run agrag chat              # Safe mode
+poetry run agrag chat --yolo       # YOLO mode
 poetry run agrag query "your question"
-poetry run agrag info
-
-# Testing
-poetry run pytest
-poetry run black src/
-poetry run ruff check src/
-
-# Cleanup
-poetry run agrag reset
+poetry run pytest && poetry run black src/ && poetry run ruff check src/
 ```
 
-### Key Files to Know
-
-- `pyproject.toml` - Dependencies and build config
-- `.env.example` - Environment variable template
-- `src/agrag/config/settings.py` - Configuration management
-- `src/agrag/kg/ontology.py` - Data model (entities + relationships)
+**Key files:**
+- `pyproject.toml` - Dependencies
+- `.env.example` - Env vars
+- `src/agrag/config/settings.py` - Config
+- `src/agrag/kg/ontology.py` - Data model
 - `src/agrag/core/graph.py` - Agent implementation
 - `src/agrag/tools/` - Retrieval tools
 - `src/agrag/cli/main.py` - CLI commands

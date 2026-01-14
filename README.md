@@ -197,6 +197,7 @@ The interactive chat mode provides a conversational interface with:
 - `/verbose` - Toggle tool call arguments in output
 - `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
 - `/exit` or `/quit` - Exit chat
+- **Ctrl+C (press twice)** - Exit immediately
 
 #### Headless Mode (Scripting & Automation)
 ```bash
