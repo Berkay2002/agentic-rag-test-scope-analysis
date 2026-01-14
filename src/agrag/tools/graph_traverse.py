@@ -16,6 +16,7 @@ from agrag.tools.schemas import (
     GraphNode,
     GraphEdge,
 )
+from agrag.tools.base import BaseToolWrapper
 from agrag.storage import Neo4jClient
 from agrag.kg.ontology import NodeLabel, RelationshipType
 
@@ -243,7 +244,7 @@ def create_graph_traverse_tool(neo4j_client: Optional[Neo4jClient] = None):
 
 
 # For backwards compatibility, provide a class-based wrapper
-class GraphTraverseTool:
+class GraphTraverseTool(BaseToolWrapper):
     """Wrapper class for backwards compatibility.
 
     Use create_graph_traverse_tool() factory function for new code.
@@ -255,18 +256,5 @@ class GraphTraverseTool:
         Args:
             neo4j_client: Neo4j client instance (creates new if not provided)
         """
-        self._tool = create_graph_traverse_tool(neo4j_client)
-
-    @property
-    def name(self) -> str:
-        return self._tool.name
-
-    @property
-    def description(self) -> str:
-        return self._tool.description
-
-    def invoke(self, *args, **kwargs):
-        return self._tool.invoke(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._tool, name)
+        tool = create_graph_traverse_tool(neo4j_client)
+        super().__init__(tool)

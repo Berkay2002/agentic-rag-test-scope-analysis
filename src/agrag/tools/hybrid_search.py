@@ -13,6 +13,14 @@ import logging
 from langchain_core.tools import tool
 
 from agrag.tools.schemas import HybridSearchInput, HybridSearchOutput, SearchResult
+from agrag.tools.base import (
+    BaseToolWrapper,
+    format_search_results_header,
+    format_search_result_item,
+    format_search_results_footer,
+    build_metadata_with_chunk_id,
+    extract_score_or_default,
+)
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
 
@@ -31,25 +39,35 @@ def _format_hybrid_output(output: HybridSearchOutput) -> str:
     if not output.results:
         return f"No results found for query: '{output.query}'"
 
-    lines = [
-        f"Hybrid Search Results ({output.fusion_method}) - found {output.total_results} items in {output.retrieval_time_ms:.2f}ms:",
-        f"Query: {output.query}",
-        "",
-    ]
+    # Build header
+    header = format_search_results_header(
+        query=output.query,
+        total_results=output.total_results,
+        retrieval_time_ms=output.retrieval_time_ms,
+        search_type="Hybrid Search",
+        additional_info=output.fusion_method,
+    )
 
+    # Format each result
+    result_items = []
     for i, result in enumerate(output.results, 1):
-        lines.append(f"{i}. Entity ID: {result.id} (RRF Score: {result.score:.4f})")
-        lines.append(f"   Snippet: {result.content[:200]}...")
-        if result.metadata:
-            entity_type = result.metadata.get("entity_type", "Unknown")
-            lines.append(f"   Entity Type: {entity_type}")
-        lines.append("")
+        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
+        item = format_search_result_item(
+            index=i,
+            result_id=result.id,
+            score=result.score,
+            score_label="RRF Score",
+            content=result.content,
+            entity_type=entity_type,
+        )
+        result_items.append(item)
 
-    lines.append(
+    # Add footer note
+    footer = format_search_results_footer(
         "Note: RRF combines pgvector similarity and pg_search BM25 ranking for optimal precision."
     )
 
-    return "\n".join(lines)
+    return header + "\n".join(result_items) + footer
 
 
 def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
@@ -119,13 +137,11 @@ def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
             search_results = []
             for result in results:
                 # Handle None rrf_score value - use 0.0 as fallback
-                rrf_score = result.get("rrf_score")
-                score = float(rrf_score) if rrf_score is not None else 0.0
+                score = extract_score_or_default(result.get("rrf_score"))
 
-                metadata = result.get("metadata", {}) or {}
-                chunk_id = result.get("chunk_id")
-                if chunk_id:
-                    metadata = {**metadata, "chunk_id": chunk_id}
+                metadata = build_metadata_with_chunk_id(
+                    result.get("metadata", {}), result.get("chunk_id")
+                )
 
                 search_result = SearchResult(
                     id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
@@ -156,7 +172,7 @@ def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
 
 
 # For backwards compatibility, provide a class-based wrapper
-class HybridSearchTool:
+class HybridSearchTool(BaseToolWrapper):
     """Wrapper class for backwards compatibility.
 
     Use create_hybrid_search_tool() factory function for new code.
@@ -168,18 +184,5 @@ class HybridSearchTool:
         Args:
             postgres_client: PostgreSQL client instance for both vector and keyword search
         """
-        self._tool = create_hybrid_search_tool(postgres_client)
-
-    @property
-    def name(self) -> str:
-        return self._tool.name
-
-    @property
-    def description(self) -> str:
-        return self._tool.description
-
-    def invoke(self, *args, **kwargs):
-        return self._tool.invoke(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._tool, name)
+        tool = create_hybrid_search_tool(postgres_client)
+        super().__init__(tool)
