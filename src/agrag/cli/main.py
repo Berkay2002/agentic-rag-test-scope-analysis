@@ -1671,5 +1671,200 @@ def load_stats():
         sys.exit(1)
 
 
+@cli.command()
+@click.argument('input_file', type=click.Path(exists=True))
+@click.option('--output', '-o', type=click.Path())
+@click.option('--format', type=click.Choice(['json', 'jsonl', 'csv']), default='json')
+@click.option('--thread-id')
+@click.option('--param', '-p', multiple=True)
+@click.option('--parallel', is_flag=True)
+@click.pass_context
+def batch(ctx, input_file, output, format, thread_id, param, parallel):
+    """Process multiple queries from a file in batch mode.
+
+    Reads queries from a file and processes them sequentially or in parallel.
+    Supports various input formats and output options.
+
+    Input file formats:
+      - JSON: Array of query objects or strings
+      - JSONL: One query per line
+      - CSV: One query per row (first column or header)
+      - TXT: One query per line
+
+    Examples:
+      agrag batch queries.json
+      agrag batch queries.json --output results.json --format json
+      agrag batch queries.csv --format csv --param k=5 --param limit=10
+      agrag batch queries.txt --thread-id batch-session --parallel
+    """
+    import asyncio
+    from pathlib import Path
+
+    async def _run_batch():
+        # Load queries from file
+        queries = load_queries_from_file(input_file)
+        if not queries:
+            click.echo("✗ No queries found in input file", err=True)
+            return
+
+        click.echo(f"\nLoaded {len(queries)} queries from {input_file}")
+
+        # Parse shared parameters
+        shared_params = {}
+        for p in param:
+            if '=' not in p:
+                click.echo(f"✗ Invalid parameter format: {p}. Use key=value format.", err=True)
+                continue
+            key, value = p.split('=', 1)
+            shared_params[key] = _parse_param_value(value)
+
+        if shared_params:
+            click.echo(f"Shared parameters: {shared_params}")
+
+        # Create batch processor
+        from agrag.batch.processor import BatchQueryProcessor
+        processor = BatchQueryProcessor(thread_id=thread_id)
+
+        # Process queries with progress bar
+        click.echo("\nProcessing queries...")
+        with click.progressbar(length=len(queries), show_eta=True) as bar:
+            results = await processor.process_queries(
+                queries=queries,
+                shared_params=shared_params,
+                parallel=parallel,
+                progress_callback=lambda: bar.update(1)
+            )
+
+        # Save results
+        output_path = processor.save_results(results, output=output, format=format)
+
+        # Generate and print summary report
+        report = processor.generate_report(results)
+        click.echo(f"\n{'='*60}")
+        click.echo("BATCH PROCESSING SUMMARY")
+        click.echo(f"{'='*60}")
+        click.echo(f"Total queries: {report['total_queries']}")
+        click.echo(f"Successful: {report['successful_queries']}")
+        click.echo(f"Failed: {report['failed_queries']}")
+        click.echo(f"Success rate: {report['success_rate']:.1%}")
+        click.echo(f"Average execution time: {report['avg_execution_time_ms']:.0f}ms")
+        click.echo(f"Total execution time: {report['total_execution_time_s']:.1f}s")
+
+        if report['tool_usage']:
+            click.echo("\nTool usage:")
+            for tool, count in report['tool_usage'].items():
+                pct = 100 * count / report['total_queries']
+                click.echo(f"  {tool}: {count} ({pct:.1f}%)")
+
+        if report['error_types']:
+            click.echo("\nError types:")
+            for error_type, count in report['error_types'].items():
+                click.echo(f"  {error_type}: {count}")
+
+        click.echo(f"\n✓ Results saved to: {output_path}")
+
+    # Run the async function
+    asyncio.run(_run_batch())
+
+
+def load_queries_from_file(file_path: str) -> list:
+    """Load queries from various file formats."""
+    import json
+    import csv
+    from pathlib import Path
+
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Input file not found: {file_path}")
+
+    queries = []
+
+    if path.suffix.lower() == '.json':
+        with open(path, 'r') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                # Array of strings or objects
+                for item in data:
+                    if isinstance(item, str):
+                        queries.append({"query": item})
+                    elif isinstance(item, dict) and "query" in item:
+                        queries.append(item)
+            elif isinstance(data, dict) and "queries" in data:
+                # Object with queries array
+                for item in data["queries"]:
+                    if isinstance(item, str):
+                        queries.append({"query": item})
+                    elif isinstance(item, dict) and "query" in item:
+                        queries.append(item)
+
+    elif path.suffix.lower() == '.jsonl':
+        with open(path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        item = json.loads(line)
+                        if isinstance(item, str):
+                            queries.append({"query": item})
+                        elif isinstance(item, dict) and "query" in item:
+                            queries.append(item)
+                    except json.JSONDecodeError:
+                        # Treat as plain text if not valid JSON
+                        queries.append({"query": line})
+
+    elif path.suffix.lower() == '.csv':
+        with open(path, 'r') as f:
+            reader = csv.reader(f)
+            # Try to detect header
+            first_row = next(reader, None)
+            if first_row:
+                # If first cell looks like a query, process it
+                if not first_row[0].lower().startswith('query'):
+                    queries.append({"query": first_row[0]})
+                # Process remaining rows
+                for row in reader:
+                    if row and row[0]:
+                        queries.append({"query": row[0]})
+
+    elif path.suffix.lower() == '.txt':
+        with open(path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    queries.append({"query": line})
+
+    else:
+        # Try as plain text
+        with open(path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    queries.append({"query": line})
+
+    return queries
+
+
+def _parse_param_value(value: str) -> any:
+    """Parse parameter value to appropriate type."""
+    # Try to parse as boolean
+    if value.lower() in ('true', 'false'):
+        return value.lower() == 'true'
+
+    # Try to parse as integer
+    try:
+        return int(value)
+    except ValueError:
+        pass
+
+    # Try to parse as float
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    # Return as string
+    return value
+
+
 if __name__ == "__main__":
     cli()

@@ -167,8 +167,60 @@ def run_headless(
     output_format: str = "text",
     thread_id: Optional[str] = None,
     debug: bool = False,
+    params: Optional[Dict[str, Any]] = None,
 ) -> int:
-    """Run a single prompt in headless mode."""
+    """Run a single prompt in headless mode.
+
+    Args:
+        prompt: The query/prompt to execute
+        output_format: Output format ("text", "json", "stream-json")
+        thread_id: Optional thread ID for checkpointing
+        debug: Enable debug logging
+        params: Optional parameters to override settings for this execution
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    # Store original settings to restore later
+    original_values = {}
+
+    # Apply parameter overrides if provided
+    if params:
+        for key, value in params.items():
+            # Skip reserved parameters that are function arguments
+            if key in ("output_format", "thread_id", "debug", "prompt"):
+                continue
+
+            # Check if the setting exists
+            if hasattr(settings, key):
+                # Store original value
+                original_values[key] = getattr(settings, key)
+
+                # Handle type conversion based on the original value type
+                original_value = original_values[key]
+                if original_value is not None:
+                    target_type = type(original_value)
+                    try:
+                        # Convert value to the correct type
+                        if target_type == bool and isinstance(value, str):
+                            # Handle boolean conversion from string
+                            value = value.lower() in ("true", "1", "yes", "on")
+                        elif target_type in (int, float) and value == "":
+                            # Skip empty strings for numeric types
+                            continue
+                        else:
+                            value = target_type(value)
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Could not convert parameter {key}="
+                            f"'{value}' to {target_type.__name__}, skipping"
+                        )
+                        continue
+
+                # Set the new value
+                setattr(settings, key, value)
+                logger.debug(f"Overrode setting {key}={value}")
+
     if not debug:
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.ERROR)
@@ -269,9 +321,22 @@ def run_headless(
                         }
                     )
 
+        # Restore original settings after successful execution
+        if original_values:
+            for key, value in original_values.items():
+                setattr(settings, key, value)
+                logger.debug(f"Restored setting {key}={value}")
+
     except Exception as exc:
         error = exc
         logger.exception("Headless execution failed")
+
+        # Restore original settings on error
+        if original_values:
+            for key, value in original_values.items():
+                setattr(settings, key, value)
+                logger.debug(f"Restored setting {key}={value} after error")
+
         if output_format == "stream-json":
             _emit_json_event(
                 {

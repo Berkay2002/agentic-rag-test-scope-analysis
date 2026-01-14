@@ -1,0 +1,14 @@
+[
+    {
+        "id": "Q1",
+        "query": "What tests cover requirement REQ_AUTH_005?"
+    },
+    {
+        "id": "Q2",
+        "query": "Find all handover-related test cases"
+    },
+    {
+        "id": "Q3",
+        "query": "Show me functions called by initiate_handover"
+    }
+]

@@ -87,3 +87,6 @@ notebooks/.ipynb_checkpoints/
 *.sqlite
 *.db
 .pyc
+
+# Claude Code
+.claude/
