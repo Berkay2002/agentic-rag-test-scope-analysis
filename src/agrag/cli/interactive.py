@@ -72,6 +72,7 @@ class InteractiveChat:
             enable_hitl: Whether to require approval before executing tools (default: True).
         """
         self.console = Console()
+        self.has_user_provided_thread_id = thread_id is not None
         self.thread_id = thread_id or f"chat-{uuid.uuid4().hex[:8]}"
         self.enable_hitl = enable_hitl
         self.verbose = verbose
@@ -107,7 +108,13 @@ class InteractiveChat:
 
     def _init_checkpointer(self) -> None:
         """Initialize the checkpointer with fallback handling."""
-        init_result = initialize_checkpointer(enable_hitl=self.enable_hitl)
+        # Always enable persistence in interactive chat when available
+        # This ensures consistent behavior across all modes (safe/YOLO)
+        # and allows session resumption even for auto-generated thread IDs
+        init_result = initialize_checkpointer(
+            enable_hitl=self.enable_hitl,
+            enable_persistence=True  # Always use persistence if available
+        )
         self.checkpointer = init_result.checkpointer
         self.checkpointer_backend = init_result.backend
         self.checkpointer_persistent = init_result.persistent
