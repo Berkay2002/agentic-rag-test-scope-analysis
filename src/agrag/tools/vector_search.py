@@ -101,7 +101,9 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
             # Apply similarity threshold filter if provided
             score_filter_fn = None
             if similarity_threshold is not None:
-                score_filter_fn = lambda score: score >= similarity_threshold
+                def threshold_filter(score: float) -> bool:
+                    return score >= similarity_threshold
+                score_filter_fn = threshold_filter
 
             search_results = process_search_results(
                 raw_results=results,

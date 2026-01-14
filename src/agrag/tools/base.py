@@ -3,7 +3,7 @@
 Provides common functionality shared across search tools to reduce code duplication.
 """
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Callable
 
 
 class BaseToolWrapper:
@@ -211,8 +211,8 @@ def process_search_results(
     raw_results: List[dict],
     score_field: str,
     source_name: str,
-    score_filter_fn: Optional[callable] = None,
-) -> List[Any]:
+    score_filter_fn: Optional[Callable[[float], bool]] = None,
+) -> List["SearchResult"]:
     """Process raw search results into SearchResult objects.
 
     Args:
