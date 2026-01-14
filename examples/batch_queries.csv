@@ -1,0 +1,11 @@
+query,category,priority
+Find all requirements related to authentication in the system,requirements,high
+What test cases verify the user login functionality?,testing,high
+Show me all functions that handle password validation,code,medium
+Which requirements are not covered by any test cases?,coverage,high
+What are the dependencies between the authentication modules?,dependencies,medium
+Search for test cases that test error handling,testing,medium
+Calculate test coverage metrics for the authentication module,metrics,high
+Find requirements about security using both vector and keyword search,requirements,high
+Show the call graph for functions in the auth module,code,low
+Evaluate the quality of test coverage for user management features,evaluation,high

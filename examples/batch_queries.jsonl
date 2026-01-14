@@ -1,0 +1,10 @@
+{"query": "Find all requirements related to authentication in the system", "id": "REQ_001", "strategy": "hybrid"}
+{"query": "What test cases verify the user login functionality?", "id": "TC_001", "k": 10}
+{"query": "Show me all functions that handle password validation", "id": "FUNC_001"}
+{"query": "Which requirements are not covered by any test cases?", "id": "COVERAGE_001", "strategy": "vector"}
+{"query": "What are the dependencies between the authentication modules?", "id": "DEPEND_001", "k": 5}
+{"query": "Search for test cases that test error handling", "id": "SEARCH_001"}
+{"query": "Calculate test coverage metrics for the authentication module", "id": "METRICS_001", "strategy": "keyword"}
+{"query": "Find requirements about security using both vector and keyword search", "id": "HYBRID_001"}
+{"query": "Show the call graph for functions in the auth module", "id": "GRAPH_001", "k": 15}
+{"query": "Evaluate the quality of test coverage for user management features", "id": "EVAL_001", "strategy": "hybrid"}

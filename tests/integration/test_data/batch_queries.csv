@@ -1,0 +1,6 @@
+query,category,priority
+What test cases verify user authentication?,test_coverage,high
+Find requirements for network performance,requirements,medium
+Show functions in the billing module,code,high
+What modules depend on the user service?,dependencies,low
+Find test cases without requirements,analysis,medium

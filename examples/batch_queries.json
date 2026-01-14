@@ -1,14 +1,41 @@
 [
-    {
-        "id": "Q1",
-        "query": "What tests cover requirement REQ_AUTH_005?"
-    },
-    {
-        "id": "Q2",
-        "query": "Find all handover-related test cases"
-    },
-    {
-        "id": "Q3",
-        "query": "Show me functions called by initiate_handover"
-    }
+  {
+    "id": "REQ_001",
+    "query": "Find all requirements related to authentication in the system"
+  },
+  {
+    "id": "TC_001",
+    "query": "What test cases verify the user login functionality?"
+  },
+  {
+    "id": "FUNC_001",
+    "query": "Show me all functions that handle password validation"
+  },
+  {
+    "id": "COVERAGE_001",
+    "query": "Which requirements are not covered by any test cases?"
+  },
+  {
+    "id": "DEPEND_001",
+    "query": "What are the dependencies between the authentication modules?"
+  },
+  {
+    "id": "SEARCH_001",
+    "query": "Search for test cases that test error handling"
+  },
+  {
+    "id": "METRICS_001",
+    "query": "Calculate test coverage metrics for the authentication module"
+  },
+  {
+    "id": "HYBRID_001",
+    "query": "Find requirements about security using both vector and keyword search"
+  },
+  {
+    "id": "GRAPH_001",
+    "query": "Show the call graph for functions in the auth module"
+  },
+  {
+    "id": "EVAL_001",
+    "query": "Evaluate the quality of test coverage for user management features"}
 ]

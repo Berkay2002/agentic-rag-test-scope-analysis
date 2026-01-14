@@ -1,0 +1,103 @@
+[
+  {
+    "query": "What test cases verify the login functionality?",
+    "k": 5,
+    "strategy": "hybrid",
+    "category": "test_coverage"
+  },
+  {
+    "query": "Find all tests for the payment processing module",
+    "k": 10,
+    "category": "test_coverage"
+  },
+  {
+    "query": "Which tests cover error handling in the API?",
+    "strategy": "vector",
+    "category": "test_coverage"
+  },
+  {
+    "query": "List all performance requirements",
+    "k": 8,
+    "category": "requirements"
+  },
+  {
+    "query": "What are the security requirements for user data?",
+    "strategy": "keyword",
+    "category": "requirements"
+  },
+  {
+    "query": "Find requirements related to system availability",
+    "k": 5,
+    "category": "requirements"
+  },
+  {
+    "query": "Show me the main functions in the authentication module",
+    "strategy": "graph",
+    "category": "code"
+  },
+  {
+    "query": "What classes are defined in the billing package?",
+    "k": 10,
+    "category": "code"
+  },
+  {
+    "query": "Find all functions that call the database",
+    "strategy": "hybrid",
+    "category": "code"
+  },
+  {
+    "query": "What modules depend on the user service?",
+    "strategy": "graph",
+    "category": "dependencies"
+  },
+  {
+    "query": "Show dependencies of the notification system",
+    "k": 8,
+    "category": "dependencies"
+  },
+  {
+    "query": "Which components use the caching layer?",
+    "strategy": "vector",
+    "category": "dependencies"
+  },
+  {
+    "query": "What test cases have not been executed recently?",
+    "k": 10,
+    "category": "analysis"
+  },
+  {
+    "query": "Find requirements without test coverage",
+    "strategy": "hybrid",
+    "category": "analysis"
+  },
+  {
+    "query": "Show me test results for the latest build",
+    "k": 5,
+    "category": "analysis"
+  },
+  {
+    "query": "Which functions handle payment validation?",
+    "strategy": "vector",
+    "category": "business_logic"
+  },
+  {
+    "query": "Find code related to user registration",
+    "k": 7,
+    "category": "business_logic"
+  },
+  {
+    "query": "What components manage session handling?",
+    "strategy": "graph",
+    "category": "business_logic"
+  },
+  {
+    "query": "List all API endpoints and their test coverage",
+    "k": 15,
+    "category": "api_coverage"
+  },
+  {
+    "query": "Which endpoints have the most test failures?",
+    "strategy": "analysis",
+    "category": "api_coverage"
+  }
+]

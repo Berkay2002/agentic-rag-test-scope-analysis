@@ -1,0 +1,5 @@
+{"query": "What test cases verify the login functionality?", "k": 5, "strategy": "hybrid"}
+{"query": "Find all tests for the payment processing module", "category": "test_coverage"}
+{"query": "Which tests cover error handling in the API?"}
+{"query": "List all performance requirements", "k": 10}
+{"query": "What are the security requirements for user data?", "strategy": "vector"}

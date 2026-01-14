@@ -65,7 +65,7 @@ class VectorSearchInput(BaseModel):
         default=["synonyms"],
         description="Methods to use for expansion: synonyms|llm|pseudo_relevance"
     )
-    max_expansion_variants: int = Field(
+    max_expansions: int = Field(
         default=3,
         ge=1,
         le=10,
@@ -119,7 +119,7 @@ class KeywordSearchInput(BaseModel):
         default=["synonyms"],
         description="Methods to use for expansion: synonyms|llm|pseudo_relevance"
     )
-    max_expansion_variants: int = Field(
+    max_expansions: int = Field(
         default=3,
         ge=1,
         le=10,
@@ -219,7 +219,7 @@ class HybridSearchInput(BaseModel):
         default=["synonyms"],
         description="Methods to use for expansion: synonyms|llm|pseudo_relevance"
     )
-    max_expansion_variants: int = Field(
+    max_expansions: int = Field(
         default=3,
         ge=1,
         le=10,

@@ -1,0 +1,151 @@
+{
+  "metadata": {
+    "total_queries": 10,
+    "timestamp": "2026-01-14T13:54:28.256951",
+    "thread_id": null,
+    "format": "json"
+  },
+  "results": [
+    {
+      "query_id": "REQ_001",
+      "query": "Find all requirements related to authentication in the system",
+      "answer": "**Answer Summary:**\nThe system contains several authentication requirements spanning different network nodes (MME, AMF, SGW, eNodeB, etc.) and protocols (LTE, NGAP, S1, 5G NR, X2). These requirements mandate that specific network elements perform UE authentication using designated procedures.\n\n**Ranked Results:**\n- REQ_AUTHENTICATION_026 (Requirement): MME authentication using NGAP procedures. (score: 0.6801) [explicit]\n- REQ_AUTHENTICATION_020 (Requirement): AMF authentication using S1 procedures. (score: 0.6791) [explicit]\n- REQ_AUTHENTICATION_022 (Requirement): SGW authentication using LTE procedures. (score: 0.6775) [explicit]\n- REQ_AUTHENTICATION_021 (Requirement): eNodeB authentication using S1 procedures. (score: 0.6748) [explicit]\n- REQ_AUTHENTICATION_046 (Requirement): MME authentication using LTE procedures. (score: 0.6613) [explicit]\n\n**Evidence:**\n- \"REQ_AUTHENTICATION_026 The MME SHALL authenticate UE using NGAP authentication procedures...\" (source: REQ_AUTHENTICATION_026)\n- \"REQ_AUTHENTICATION_020 The AMF SHALL authenticate UE using S1 authentication procedures...\" (source: REQ_AUTHENTICATION_020)\n- \"REQ_AUTHENTICATION_022 The SGW SHALL authenticate UE using LTE authentication procedures...\" (source: REQ_AUTHENTICATION_022)\n\n**Graph Paths:**\n- n/a (Direct search result; no traversal performed)\n\n**Uncertainty:**\n- The specific mapping of these requirements to test cases or source code functions is currently unknown without further traversal.",
+      "tool_calls": [
+        "vector_search"
+      ],
+      "execution_time_ms": 7546.461820602417,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:17.217976",
+      "params": {}
+    },
+    {
+      "query_id": "TC_001",
+      "query": "What test cases verify the user login functionality?",
+      "answer": "**Answer Summary:**\nThe user login functionality (referred to as UE authentication in the context of LTE) is verified by test case `TC_AUTHENTICATION_178`, which focuses on successful authentication procedures and session creation.\n\n**Ranked Results:**\n- TC_AUTHENTICATION_178 (TestCase): Verifies authentication success scenarios using LTE protocol. (score: 0.0180) [explicit]\n\n**Evidence:**\n- \"TC_AUTHENTICATION_178 Test Authentication Success Verify authentication behavior during success scenario using LTE protocol...\" (source: TC_AUTHENTICATION_178)\n- \"The MME SHALL authenticate UE using LTE authentication procedures\" (source: REQ_AUTHENTICATION_046)\n\n**Graph Paths:**\n- TC_AUTHENTICATION_178 -[VERIFIES]-> REQ_AUTHENTICATION_046\n- TC_AUTHENTICATION_178 -[COVERS]-> FUNC_create_session\n\n**Uncertainty:**\n- The specific mapping of \"user login\" to \"UE authentication\" is inferred based on standard LTE/telecom domain terminology where a \"login\" corresponds to the initial attachment and authentication of the User Equipment (UE).",
+      "tool_calls": [
+        "hybrid_search",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 5655.602931976318,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:22.873635",
+      "params": {}
+    },
+    {
+      "query_id": "FUNC_001",
+      "query": "Show me all functions that handle password validation",
+      "answer": "**Answer Summary:**\nThe primary function identified for credential and password-related validation is `FUNC_verify_credentials`. It is defined within the core authentication module and is heavily tested across multiple protocol scenarios (5G NR, LTE, S1, X2, NGAP).\n\n**Ranked Results:**\n- **FUNC_verify_credentials** (Function): Core function to verify credentials; located in `src/network/authentication.py`. (score: n/a) [explicit]\n- **FUNC_authenticate_ue** (Function): Higher-level authentication function that likely utilizes credential verification. (score: n/a) [inferred]\n- **FUNC_refresh_token** (Function): Manages session tokens, often secondary to initial password validation. (score: n/a) [inferred]\n\n**Evidence:**\n- \"Verify Credentials function def verify_credentials(self, *args, **kwargs) -> bool...\" (source: FUNC_verify_credentials)\n- \"The MME SHALL authenticate UE using X2 authentication procedures\" (source: REQ_AUTHENTICATION_037; verified by tests covering FUNC_verify_credentials)\n\n**Graph Paths:**\n- FUNC_verify_credentials -[DEFINED_IN]-> FILE_src_network_authentication_py\n- TC_AUTHENTICATION_123 -[COVERS]-> FUNC_verify_credentials\n- FUNC_verify_credentials <-[DEFINED_IN]- FILE_src_network_authentication_py -[PART_OF]-> COMP_NETWORK\n\n**Uncertainty:**\n- The specific internal logic of `FUNC_verify_credentials` (e.g., hashing, length checks) is inferred as it is represented as a signature in the metadata rather than full source code.\n- `FUNC_authenticate_ue` and `FUNC_refresh_token` are grouped in the same file but their exact dependency on `FUNC_verify_credentials` is inferred from their functional proximity and shared test coverage.",
+      "tool_calls": [
+        "hybrid_search",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 7256.258726119995,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:30.129930",
+      "params": {}
+    },
+    {
+      "query_id": "COVERAGE_001",
+      "query": "Which requirements are not covered by any test cases?",
+      "answer": "**Answer Summary:**\nAnalysis of the knowledge graph identified several requirements related to 5G NR signaling and S1 measurement reporting that currently lack explicit test coverage (no `VERIFIES` or `COVERS` relationships from any `TestCase`).\n\n**Ranked Results:**\n- REQ_SIGNALING_048 (Requirement): 5G NR signaling message processing with <0.01% error rate. [explicit]\n- REQ_MEASUREMENT_013 (Requirement): S1 measurement report collection every 200ms. [explicit]\n- REQ_SIGNALING_032 (Requirement): LTE signaling message processing error rate requirements. [inferred - pending traversal]\n- REQ_MEASUREMENT_006 (Requirement): 5G NR measurement report collection frequency. [inferred]\n\n**Evidence:**\n- \"REQ_SIGNALING_048 The system SHALL process 5G NR signaling messages with error rate < 0.01%...\" (source: REQ_SIGNALING_048)\n- \"REQ_MEASUREMENT_013 The system SHALL collect S1 measurement reports every 200ms...\" (source: REQ_MEASUREMENT_013)\n- \"No paths found from node: 'REQ_SIGNALING_048'\" (source: graph_traverse)\n\n**Graph Paths:**\n- TC_SIGNALING_196 -[VERIFIES]-> REQ_SIGNALING_039 (Example of a *covered* requirement for contrast)\n- [No TestCase] -[VERIFIES]-> REQ_SIGNALING_048 (Orphaned requirement)\n\n**Uncertainty:**\n- The status of REQ_SIGNALING_032 and REQ_MEASUREMENT_006 is inferred based on their similarity to other uncovered requirements; explicit traversal was only performed for the top three candidates.\n- \"Not covered\" assumes that only `VERIFIES` and `COVERS` relationships define coverage in this schema.",
+      "tool_calls": [
+        "vector_search",
+        "graph_traverse",
+        "graph_traverse",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 7805.4039478302,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:37.935369",
+      "params": {}
+    },
+    {
+      "query_id": "DEPEND_001",
+      "query": "What are the dependencies between the authentication modules?",
+      "answer": "**Answer Summary:**\nThe authentication module (`MOD_network_authentication`) has a direct outgoing dependency on the core session module (`MOD_core_session`). No other internal or external authentication-specific module dependencies were explicitly identified in the structural graph.\n\n**Ranked Results:**\n- MOD_network_authentication (Module): Primary module handling authentication functionality. (score: 0.8484) [explicit]\n- MOD_core_session (Module): Module for session functionality; identified as a direct dependency. (score: 0.6934) [explicit]\n\n**Evidence:**\n- \"MOD_network_authentication network.authentication Module for authentication functionality\" (source: MOD_network_authentication)\n- \"Module:MOD_network_authentication -[DEPENDS_ON]-> Module:MOD_core_session\" (source: graph_traverse)\n\n**Graph Paths:**\n- MOD_network_authentication -[DEPENDS_ON]-> MOD_core_session\n\n**Uncertainty:**\n- Dependencies on utility modules (like `MOD_utils_logging`) or signaling (`MOD_network_signaling`) are inferred as likely based on semantic similarity but were not found in the explicit `DEPENDS_ON` relationship check during traversal.",
+      "tool_calls": [
+        "vector_search",
+        "graph_traverse",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 6002.048015594482,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:43.937454",
+      "params": {}
+    },
+    {
+      "query_id": "SEARCH_001",
+      "query": "Search for test cases that test error handling",
+      "answer": "**Answer Summary:**\nSeveral test cases specifically target \"failure scenarios\" across different protocols (X2, GTP, S1, LTE), which functionally serve as error handling tests. These tests cover critical procedures like handovers, data transmission, and signaling during unexpected failures.\n\n**Ranked Results:**\n- TC_HANDOVER_007 (TestCase): Verifies handover behavior during failure scenarios using the S1 protocol. (score: 0.6437) [explicit]\n- TC_DATA_022 (TestCase): Verifies data behavior during failure scenarios using the X2 protocol. (score: 0.6562) [explicit]\n- TC_PROTOCOL_121 (TestCase): Verifies protocol behavior during failure scenarios using the X2 protocol. (score: 0.6381) [explicit]\n- TC_SIGNALING_144 (TestCase): Verifies signaling behavior during failure scenarios using the LTE protocol. (score: 0.6319) [explicit]\n\n**Evidence:**\n- \"TC_HANDOVER_007 Test Handover Failure Verify handover behavior during failure scenario using S1 protocol...\" (source: TC_HANDOVER_007)\n- \"TC_DATA_022 Test Data Failure Verify data behavior during failure scenario using X2 protocol...\" (source: TC_DATA_022)\n- \"TC_SIGNALING_144 Test Signaling Failure Verify signaling behavior during failure scenario using LTE protocol...\" (source: TC_SIGNALING_144)\n\n**Graph Paths:**\n- TC_HANDOVER_007 -[VERIFIES]-> REQ_HANDOVER_004\n- TC_HANDOVER_007 -[COVERS]-> FUNC_update_session\n- TC_HANDOVER_007 -[COVERS]-> FUNC_route_message\n\n**Uncertainty:**\n- While the snippets explicitly mention \"failure scenario,\" the specific error codes or recovery mechanisms (e.g., specific ICMP or NAS error causes) being tested are not detailed in the brief snippets.",
+      "tool_calls": [
+        "vector_search",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 6893.026113510132,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:50.830513",
+      "params": {}
+    },
+    {
+      "query_id": "METRICS_001",
+      "query": "Calculate test coverage metrics for the authentication module",
+      "answer": "**Answer Summary:**\nThe test coverage for the authentication-related requirements is currently **low**. Out of the primary authentication requirements identified (NGAP, S1, X2), only one (REQ_AUTHENTICATION_026) has an explicit verification link to a test case.\n\n**Ranked Results:**\n- REQ_AUTHENTICATION_026 (Requirement): MME NGAP authentication procedures. (score: 0.71) [explicit]\n- REQ_AUTHENTICATION_021 (Requirement): eNodeB S1 authentication procedures. (score: 0.70) [inferred - no tests]\n- REQ_AUTHENTICATION_037 (Requirement): MME X2 authentication procedures. (score: 0.65) [inferred - no tests]\n- TC_AUTHENTICATION_037 (TestCase): Verify authentication behavior during success scenario using 5G NR protocol. (score: n/a) [explicit]\n\n**Evidence:**\n- \"The MME SHALL authenticate UE using NGAP authentication procedures\" (source: REQ_AUTHENTICATION_026)\n- \"Requirement:REQ_AUTHENTICATION_026 <-[VERIFIES]- TestCase:TC_AUTHENTICATION_037\" (source: graph_traverse)\n\n**Graph Paths:**\n- TC_AUTHENTICATION_037 -[VERIFIES]-> REQ_AUTHENTICATION_026\n\n**Uncertainty:**\n- A specific \"Authentication Module\" entity (MOD_*) was not found; coverage is calculated based on requirements matching the \"authentication\" concept.\n- Coverage metrics for S1 and X2 procedures (REQ_AUTHENTICATION_021, REQ_AUTHENTICATION_037) are 0% as no linked test cases were found in the graph.",
+      "tool_calls": [
+        "hybrid_search",
+        "vector_search",
+        "graph_traverse",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 8672.12700843811,
+      "success": true,
+      "timestamp": "2026-01-14T13:53:59.502694",
+      "params": {}
+    },
+    {
+      "query_id": "HYBRID_001",
+      "query": "Find requirements about security using both vector and keyword search",
+      "answer": "**Answer Summary:**\nSecurity requirements in the system primarily focus on UE authentication across various network elements (MME, SGW, PGW, AMF) using protocols like S1, NGAP, and X2. These requirements are verified by system-level test cases focusing on protocol-specific authentication procedures.\n\n**Ranked Results:**\n- REQ_AUTHENTICATION_022 (Requirement): SGW SHALL authenticate UE using LTE authentication procedures. (score: 0.0180) [explicit]\n- REQ_AUTHENTICATION_046 (Requirement): MME SHALL authenticate UE using LTE authentication procedures. (score: 0.6110) [explicit]\n- REQ_AUTHENTICATION_026 (Requirement): MME SHALL authenticate UE using NGAP authentication procedures. (score: 0.6197) [explicit]\n- REQ_AUTHENTICATION_020 (Requirement): AMF SHALL authenticate UE using S1 authentication procedures. (score: 0.6409) [explicit]\n\n**Evidence:**\n- \"REQ_AUTHENTICATION_022 The SGW SHALL authenticate UE using LTE authentication procedures...\" (source: REQ_AUTHENTICATION_022)\n- \"REQ_AUTHENTICATION_046 The MME SHALL authenticate UE using LTE authentication procedures...\" (source: REQ_AUTHENTICATION_046)\n\n**Graph Paths:**\n- TC_AUTHENTICATION_038 -[VERIFIES]-> REQ_AUTHENTICATION_022 (found via graph_traverse)\n\n**Uncertainty:**\n- Specific encryption or integrity protection requirements (e.g., AES, SNOW 3G) were not explicitly returned in the top results, though authentication requirements are the primary security-related entities found.",
+      "tool_calls": [
+        "hybrid_search",
+        "vector_search",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 7619.258880615234,
+      "success": true,
+      "timestamp": "2026-01-14T13:54:07.122007",
+      "params": {}
+    },
+    {
+      "query_id": "GRAPH_001",
+      "query": "Show the call graph for functions in the auth module",
+      "answer": "**Answer Summary:**\nThe authentication module (`MOD_network_authentication`) contains core functions for UE authentication and credential verification, primarily defined within `src/network/authentication.py`. While direct `CALLS` relationships are not explicitly stored in the graph, the call graph can be inferred from the shared file structure and common test coverage.\n\n**Ranked Results:**\n- **FUNC_authenticate_ue** (Function): Core UE authentication logic. (score: n/a) [explicit]\n- **FUNC_verify_credentials** (Function): Validates user credentials; co-located in the same file. (score: n/a) [explicit]\n- **FUNC_refresh_token** (Function): Manages session token renewal; co-located in the same file. (score: n/a) [explicit]\n- **FUNC_process_message** (Function): Downstream signaling logic that frequently co-occurs in auth test cases (e.g., `TC_HANDOVER_197`). (score: n/a) [inferred]\n\n**Evidence:**\n- \"`FUNC_authenticate_ue` ... `DEFINED_IN` ... `FILE_src_network_authentication_py`\" (source: graph_traverse)\n- \"`FUNC_refresh_token` ... `DEFINED_IN` ... `FILE_src_network_authentication_py`\" (source: graph_traverse)\n- \"`FUNC_verify_credentials` ... `DEFINED_IN` ... `FILE_src_network_authentication_py`\" (source: graph_traverse)\n\n**Graph Paths:**\n- `MOD_network_authentication` <-[BELONGS_TO]- `CLASS_AuthenticationHandler`\n- `FUNC_authenticate_ue` -[DEFINED_IN]-> `FILE_src_network_authentication_py` <-[DEFINED_IN]- `FUNC_verify_credentials`\n- `TC_SIGNALING_055` -[COVERS]-> `FUNC_authenticate_ue` AND `FUNC_refresh_token`\n\n**Uncertainty:**\n- The specific execution order (A calls B) is **inferred** based on their presence in the same source file and shared test case coverage, as direct function-to-function `CALLS` relationships were not returned in the traversal.",
+      "tool_calls": [
+        "keyword_search",
+        "graph_traverse",
+        "graph_traverse",
+        "graph_traverse",
+        "graph_traverse",
+        "hybrid_search",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 13905.951976776123,
+      "success": true,
+      "timestamp": "2026-01-14T13:54:21.027993",
+      "params": {}
+    },
+    {
+      "query_id": "EVAL_001",
+      "query": "Evaluate the quality of test coverage for user management features",
+      "answer": "**Answer Summary:**\nTest coverage for user management (specifically authentication) is **partially complete but fragmented**. While core 5G/LTE authentication procedures are defined and linked to system tests, there is a lack of evidence for \"administrative\" user management (e.g., account creation, password resets, or role-based access) in the current knowledge graph.\n\n**Ranked Results:**\n- **TC_AUTHENTICATION_037** (TestCase): Verify authentication behavior during success scenario using 5G NR protocol (score: n/a) [explicit]\n- **REQ_AUTHENTICATION_026** (Requirement): The MME SHALL authenticate UE using NGAP authentication procedures (score: 0.5668) [explicit]\n- **CLASS_AuthenticationHandler** (Class): AuthenticationHandler class for managing authentication operations (score: 0.0180) [explicit]\n\n**Evidence:**\n- \"Requirement:REQ_AUTHENTICATION_026 <-[VERIFIES]- TestCase:TC_AUTHENTICATION_037\" (source: graph_traverse)\n- \"AuthenticationHandler class for managing authentication operations...\" (source: CLASS_AuthenticationHandler)\n\n**Graph Paths:**\n- **TC_AUTHENTICATION_037** -[VERIFIES]-> **REQ_AUTHENTICATION_026**\n\n**Uncertainty:**\n- **Inferred Coverage Gap:** No requirements or test cases were found for non-signaling \"User Management\" (e.g., web UI users or admin CLI accounts). All retrieved data relates to UE (User Equipment) signaling authentication.\n- **Relationship Sparse:** Only one explicit test-to-requirement link was identified for the top-ranked requirement, suggesting low test density for protocol authentication.",
+      "tool_calls": [
+        "hybrid_search",
+        "vector_search",
+        "graph_traverse"
+      ],
+      "execution_time_ms": 7228.733777999878,
+      "success": true,
+      "timestamp": "2026-01-14T13:54:28.256769",
+      "params": {}
+    }
+  ]
+}

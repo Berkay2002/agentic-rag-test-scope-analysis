@@ -800,9 +800,9 @@ def _parse_result_ids(result_str: str) -> list:
     Parse IDs from the formatted tool output string.
 
     The tools return formatted strings like:
-    "1. ID: TC_HANDOVER_001 (Score: 0.85)"
+    "1. Entity ID: TC_HANDOVER_001 (Score: 0.85)"
     or
-    "1. ID: TestCase_TC_HANDOVER_001 (RRF Score: 0.016)"
+    "1. Entity ID: TestCase_TC_HANDOVER_001 (RRF Score: 0.016)"
 
     This function extracts the IDs and normalizes them.
 
@@ -822,14 +822,14 @@ def _parse_result_ids(result_str: str) -> list:
     # - FUNC_something_001 (functions)
     # Also handle prefixed versions like TestCase_TC_HANDOVER_001
     patterns = [
-        r"ID:\s*(?:ChangeRequest_)?(CR_[A-Z]+_\d+)",  # Change requests
-        r"ID:\s*(?:File_)?(FILE_[A-Za-z0-9_]+)",  # Files
-        r"ID:\s*(?:Component_)?(COMP_[A-Za-z0-9_]+)",  # Components
-        r"ID:\s*(?:TestCase_)?(TC_[A-Z]+_\d+)",  # Test cases
-        r"ID:\s*(?:Requirement_)?(REQ_[A-Z]+_\d+)",  # Requirements
-        r"ID:\s*(?:Function_)?(FUNC_[A-Za-z_]+)",  # Functions
-        r"ID:\s*(?:Class_)?(CLASS_[A-Za-z_]+)",  # Classes
-        r"ID:\s*(?:Module_)?(MOD_[A-Za-z_.]+)",  # Modules
+        r"(?:Entity ID|ID):\s*(?:ChangeRequest_)?(CR_[A-Z]+_\d+)",  # Change requests
+        r"(?:Entity ID|ID):\s*(?:File_)?(FILE_[A-Za-z0-9_]+)",  # Files
+        r"(?:Entity ID|ID):\s*(?:Component_)?(COMP_[A-Za-z0-9_]+)",  # Components
+        r"(?:Entity ID|ID):\s*(?:TestCase_)?(TC_[A-Z]+_\d+)",  # Test cases
+        r"(?:Entity ID|ID):\s*(?:Requirement_)?(REQ_[A-Z]+_\d+)",  # Requirements
+        r"(?:Entity ID|ID):\s*(?:Function_)?(FUNC_[A-Za-z_]+)",  # Functions
+        r"(?:Entity ID|ID):\s*(?:Class_)?(CLASS_[A-Za-z_]+)",  # Classes
+        r"(?:Entity ID|ID):\s*(?:Module_)?(MOD_[A-Za-z_.]+)",  # Modules
     ]
 
     for pattern in patterns:

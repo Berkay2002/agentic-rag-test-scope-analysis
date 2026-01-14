@@ -1,0 +1,12 @@
+[
+  "What test cases verify the authentication module?",
+  "Find all requirements related to network performance",
+  "Which functions are called by the main processing pipeline?",
+  "List all test cases that failed in the last run",
+  "What are the dependencies of the billing module?",
+  "Find test cases covering error handling",
+  "Which modules implement the user interface?",
+  "Show me test coverage for the payment processing",
+  "What requirements are not covered by tests?",
+  "Find all functions that handle customer data"
+]

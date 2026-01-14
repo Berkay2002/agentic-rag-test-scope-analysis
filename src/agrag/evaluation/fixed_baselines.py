@@ -25,11 +25,41 @@ def _infer_label_from_id(entity_id: str) -> NodeLabel:
     return NodeLabel.FUNCTION
 
 
+def _infer_entity_type_from_id(entity_id: str) -> str | None:
+    if entity_id.startswith("CR_"):
+        return NodeLabel.CHANGE_REQUEST.value
+    if entity_id.startswith("FILE_"):
+        return NodeLabel.FILE.value
+    if entity_id.startswith("COMP_"):
+        return NodeLabel.COMPONENT.value
+    if entity_id.startswith("REQ_"):
+        return NodeLabel.REQUIREMENT.value
+    if entity_id.startswith("TC_"):
+        return NodeLabel.TEST_CASE.value
+    if entity_id.startswith("FUNC_"):
+        return NodeLabel.FUNCTION.value
+    if entity_id.startswith("CLASS_"):
+        return NodeLabel.CLASS.value
+    if entity_id.startswith("MOD_"):
+        return NodeLabel.MODULE.value
+    return None
+
+
 def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
     from agrag.cli.main import _parse_result_ids
 
-    result_str = _invoke_tool(hybrid_tool, query=query, k=k)
-    return _parse_result_ids(result_str)
+    entity_type = _infer_entity_type_from_id(query)
+    kwargs = {"query": query, "k": k}
+    if entity_type:
+        kwargs["entity_type"] = entity_type
+
+    result_str = _invoke_tool(hybrid_tool, **kwargs)
+    ids = _parse_result_ids(result_str)
+
+    if entity_type and query not in ids:
+        ids.insert(0, query)
+
+    return ids
 
 
 def run_fixed_graphrag(query: str, hybrid_tool, graph_tool, k: int = 10) -> List[str]:

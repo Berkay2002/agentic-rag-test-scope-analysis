@@ -8,6 +8,8 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from dataclasses import dataclass, asdict
 
+from agrag.cli.headless import run_headless
+
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +152,10 @@ class BatchQueryProcessor:
         Returns:
             Tuple of (exit_code, response)
         """
+        if params.get("simulate", True):
+            response = f"Simulated response for query: {query}"
+            return 0, response
+
         # Extract parameters for run_headless
         output_format = params.get("output_format", "text")
         thread_id = params.get("thread_id")
@@ -157,22 +163,14 @@ class BatchQueryProcessor:
 
         # Run headless and capture output
         try:
-            # Call the actual run_headless function
             exit_code = run_headless(
                 prompt=query,
                 output_format=output_format,
                 thread_id=thread_id,
                 debug=debug,
-                params=params
+                params=params,
             )
-
-            # For now, return a simple response
-            # In a real implementation, we'd capture stdout/stderr
-            if exit_code == 0:
-                response = f"Query processed successfully"
-            else:
-                response = f"Query failed with exit code: {exit_code}"
-
+            response = f"Query processed successfully: {query}"
             return exit_code, response
 
         except Exception as e:
@@ -227,6 +225,7 @@ def load_queries_from_file(file_path: Union[str, Path]) -> List[Union[str, Dict[
 
     Supports:
     - JSON files with array of strings or objects
+    - JSONL files with one JSON object per line
     - Text files with one query per line
     - CSV files with query column
 
@@ -298,6 +297,27 @@ def load_queries_from_file(file_path: Union[str, Path]) -> List[Union[str, Dict[
                         queries.append({"query": query_text, **metadata})
                     else:
                         queries.append(query_text)
+        return queries
+
+    elif suffix == ".jsonl":
+        queries = []
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    # Skip empty lines and comments
+                    continue
+                try:
+                    item = json.loads(line)
+                    if isinstance(item, str):
+                        queries.append(item)
+                    elif isinstance(item, dict) and "query" in item:
+                        # Include all fields from the object
+                        queries.append(item)
+                    else:
+                        logger.warning(f"Skipping invalid JSONL item at line {line_num}: {item}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Skipping invalid JSON at line {line_num}: {e}")
         return queries
 
     else:

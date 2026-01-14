@@ -1,6 +1,6 @@
 """Query expansion strategies for improving retrieval recall."""
 
-from typing import List, Set, Dict, Optional
+from typing import List, Dict, Optional
 import re
 from agrag.config.settings import settings
 import logging
@@ -170,7 +170,7 @@ class PseudoRelevanceExpander:
             logging.error(f"Pseudo-relevance expansion failed: {e}")
             return [query]
 
-    def _extract_key_terms(self, results, original_query: str) -> Set[str]:
+    def _extract_key_terms(self, results, original_query: str) -> List[str]:
         """Extract important terms from results."""
         from collections import Counter
         import re
@@ -187,12 +187,12 @@ class PseudoRelevanceExpander:
         term_counts = Counter(all_terms)
 
         # Filter: terms not in original query, reasonably frequent
-        key_terms = set()
+        key_terms = []
         for term, count in term_counts.most_common():
-            if term not in original_terms and count >= 2:
-                key_terms.add(term)
-                if len(key_terms) >= 10:
-                    break
+            if term not in original_terms and count >= 2 and term not in key_terms:
+                key_terms.append(term)
+            if len(key_terms) >= 10:
+                break
 
         return key_terms
 
