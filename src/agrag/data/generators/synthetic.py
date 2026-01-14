@@ -1207,14 +1207,14 @@ class TelecomDataGenerator:
         # 1. Entity lookup by ID
         sample_tests = random.sample(test_cases, min(5, len(test_cases)))
         for test in sample_tests:
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 f"Find test case {test['id']}",
                 [test["id"]],
                 QueryDifficulty.SIMPLE,
                 "entity_lookup",
             )
-            simple_queries.append(q)
+            simple_queries.append(query)
             query_id += 1
 
         # 2. Feature area filter
@@ -1225,10 +1225,10 @@ class TelecomDataGenerator:
                 if use_paraphrases
                 else f"Find tests for {feature} feature"
             )
-            q = self._create_query(
+            query = self._create_query(
                 query_id, query_text, test_ids, QueryDifficulty.SIMPLE, "feature_filter"
             )
-            simple_queries.append(q)
+            simple_queries.append(query)
             query_id += 1
 
         # 3. Result filter
@@ -1245,14 +1245,14 @@ class TelecomDataGenerator:
                     )
                 else:
                     query_text = f"Find tests with {result} result"
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     tests_by_result[result],
                     QueryDifficulty.SIMPLE,
                     "result_filter",
                 )
-                simple_queries.append(q)
+                simple_queries.append(query)
                 query_id += 1
 
         # 4. Priority filter
@@ -1264,14 +1264,14 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"Find {priority} priority tests"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     tests_by_priority[priority],
                     QueryDifficulty.SIMPLE,
                     "priority_filter",
                 )
-                simple_queries.append(q)
+                simple_queries.append(query)
                 query_id += 1
 
         # 5. Test type filter
@@ -1283,10 +1283,10 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"Find {test_type} tests"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id, query_text, test_ids, QueryDifficulty.SIMPLE, "type_filter"
                 )
-                simple_queries.append(q)
+                simple_queries.append(query)
                 query_id += 1
 
         # Trim to target count
@@ -1310,14 +1310,14 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"Tests impacted by change request {cr_id}"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     list(test_ids),
                     QueryDifficulty.MODERATE,
                     "change_request_tests",
                 )
-                moderate_queries.append(q)
+                moderate_queries.append(query)
                 query_id += 1
 
         # 1. Requirement coverage - "What tests verify REQ_XXX?"
@@ -1329,7 +1329,7 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"What tests verify {req_id}?"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     test_ids,
@@ -1337,7 +1337,7 @@ class TelecomDataGenerator:
                     "requirement_coverage",
                     expected_relationship="VERIFIES",
                 )
-                moderate_queries.append(q)
+                moderate_queries.append(query)
                 query_id += 1
 
         # 2. Function coverage - "What tests cover function X?"
@@ -1350,7 +1350,7 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"What tests cover function {func_name}?"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     test_ids,
@@ -1358,7 +1358,7 @@ class TelecomDataGenerator:
                     "function_coverage",
                     expected_relationship="COVERS",
                 )
-                moderate_queries.append(q)
+                moderate_queries.append(query)
                 query_id += 1
 
         # 3. Impact analysis - "Tests impacted by changes in FILE_XXX"
@@ -1373,14 +1373,14 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"Impact analysis for {file_id}"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     list(impacted),
                     QueryDifficulty.MODERATE,
                     "impact_analysis",
                 )
-                moderate_queries.append(q)
+                moderate_queries.append(query)
                 query_id += 1
 
         # 4. Suite membership
@@ -1391,10 +1391,10 @@ class TelecomDataGenerator:
                 if use_paraphrases
                 else f"Tests in {suite} suite"
             )
-            q = self._create_query(
+            query = self._create_query(
                 query_id, query_text, test_ids, QueryDifficulty.MODERATE, "suite_membership"
             )
-            moderate_queries.append(q)
+            moderate_queries.append(query)
             query_id += 1
 
         # 5. Combined filters - "Failed tests in Authentication feature"
@@ -1406,27 +1406,27 @@ class TelecomDataGenerator:
                     if test_lookup.get(tid, {}).get("metadata", {}).get("result") == "FAIL"
                 ]
                 if failed_in_feature:
-                    q = self._create_query(
+                    query = self._create_query(
                         query_id,
                         f"Failed tests in {feature} feature",
                         failed_in_feature,
                         QueryDifficulty.MODERATE,
                         "combined_filter",
                     )
-                    moderate_queries.append(q)
+                    moderate_queries.append(query)
                     query_id += 1
 
         # 6. Tag-based queries
         tagged_tests = self._find_tests_with_tag(test_cases, "regression")
         if tagged_tests:
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 "Tests tagged with regression",
                 tagged_tests,
                 QueryDifficulty.MODERATE,
                 "tag_filter",
             )
-            moderate_queries.append(q)
+            moderate_queries.append(query)
             query_id += 1
 
         # 7. Failure triage - "Tests related to error ERR_XXXX"
@@ -1445,14 +1445,14 @@ class TelecomDataGenerator:
                 if use_paraphrases
                 else f"Tests related to error {error_code}"
             )
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 query_text,
                 [test["id"]],
                 QueryDifficulty.MODERATE,
                 "failure_triage",
             )
-            moderate_queries.append(q)
+            moderate_queries.append(query)
             query_id += 1
 
         queries.extend(moderate_queries[:num_moderate])
@@ -1480,14 +1480,14 @@ class TelecomDataGenerator:
                     if use_paraphrases
                     else f"Coverage for {req_id} by component"
                 )
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     query_text,
                     list(components),
                     QueryDifficulty.COMPLEX,
                     "coverage_by_component",
                 )
-                complex_queries.append(q)
+                complex_queries.append(query)
                 query_id += 1
 
         # 2. Multi-hop traversal - "Tests for functions in class X"
@@ -1499,7 +1499,7 @@ class TelecomDataGenerator:
                 tests_for_class.update(func_to_tests.get(fid, []))
             if tests_for_class:
                 class_name = class_id.replace("CLASS_", "")
-                q = self._create_query(
+                query = self._create_query(
                     query_id,
                     f"Tests for functions in {class_name} class",
                     list(tests_for_class),
@@ -1507,7 +1507,7 @@ class TelecomDataGenerator:
                     "multi_hop_traversal",
                     expected_relationship="COVERS -> DEFINED_IN",
                 )
-                complex_queries.append(q)
+                complex_queries.append(query)
                 query_id += 1
 
         # 3. Aggregation-style queries (feature areas with failing tests)
@@ -1530,7 +1530,7 @@ class TelecomDataGenerator:
                 for tid in tests_by_feature[top_feature]
                 if test_lookup.get(tid, {}).get("metadata", {}).get("result") == "FAIL"
             ]
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 "Which feature area has the most failing tests?",
                 relevant_tests,
@@ -1538,7 +1538,7 @@ class TelecomDataGenerator:
                 "aggregation",
                 notes=f"Expected: {top_feature} with {features_with_failures[0][1]} failures",
             )
-            complex_queries.append(q)
+            complex_queries.append(query)
             query_id += 1
 
         # 4. Coverage gaps - "Requirements with no test coverage"
@@ -1548,7 +1548,7 @@ class TelecomDataGenerator:
             if r["id"] not in req_to_tests or not req_to_tests[r["id"]]
         ]
         if uncovered_reqs:
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 "Requirements with no test coverage",
                 uncovered_reqs,
@@ -1556,7 +1556,7 @@ class TelecomDataGenerator:
                 "coverage_gap",
                 notes="Requirements without VERIFIES relationships",
             )
-            complex_queries.append(q)
+            complex_queries.append(query)
             query_id += 1
 
         # 5. Cross-entity queries - "Functions covered by failed authentication tests"
@@ -1575,7 +1575,7 @@ class TelecomDataGenerator:
                     ):
                         covered_funcs.add(rel["target_id"])
                 if covered_funcs:
-                    q = self._create_query(
+                    query = self._create_query(
                         query_id,
                         "Functions covered by failed authentication tests",
                         list(covered_funcs),
@@ -1583,7 +1583,7 @@ class TelecomDataGenerator:
                         "cross_entity",
                         expected_relationship="COVERS",
                     )
-                    complex_queries.append(q)
+                    complex_queries.append(query)
                     query_id += 1
 
         # 6. Critical failed tests
@@ -1594,14 +1594,14 @@ class TelecomDataGenerator:
             and t.get("metadata", {}).get("result") == "FAIL"
         ]
         if critical_failed:
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 "Critical priority tests that failed",
                 critical_failed,
                 QueryDifficulty.COMPLEX,
                 "compound_filter",
             )
-            complex_queries.append(q)
+            complex_queries.append(query)
             query_id += 1
 
         # 7. High coverage tests with errors
@@ -1612,14 +1612,14 @@ class TelecomDataGenerator:
             and t.get("metadata", {}).get("code_coverage_pct", 0) > 80
         ]
         if error_tests_high_coverage:
-            q = self._create_query(
+            query = self._create_query(
                 query_id,
                 "Tests with ERROR result and high code coverage",
                 error_tests_high_coverage,
                 QueryDifficulty.COMPLEX,
                 "compound_filter",
             )
-            complex_queries.append(q)
+            complex_queries.append(query)
             query_id += 1
 
         queries.extend(complex_queries[:num_complex])
@@ -1628,7 +1628,7 @@ class TelecomDataGenerator:
         # NEGATIVE QUERIES
         # =========================================================================
         for neg in NEGATIVE_QUERIES[:num_negative]:
-            q = {
+            query = {
                 "id": f"Q_{query_id:03d}",
                 "query": neg["query"],
                 "relevant_ids": neg["relevant_ids"],
@@ -1636,7 +1636,7 @@ class TelecomDataGenerator:
                 "query_type": neg["query_type"],
                 "notes": neg.get("rationale", ""),
             }
-            queries.append(q)
+            queries.append(query)
             query_id += 1
 
         # Build final dataset
@@ -1673,7 +1673,7 @@ class TelecomDataGenerator:
         notes: str = None,
     ) -> Dict[str, Any]:
         """Create a standardized query dictionary."""
-        q = {
+        query = {
             "id": f"Q_{query_id:03d}",
             "query": query_text,
             "relevant_ids": relevant_ids,
@@ -1681,10 +1681,10 @@ class TelecomDataGenerator:
             "query_type": query_type,
         }
         if expected_relationship:
-            q["expected_relationship"] = expected_relationship
+            query["expected_relationship"] = expected_relationship
         if notes:
-            q["notes"] = notes
-        return q
+            query["notes"] = notes
+        return query
 
     def _build_requirement_to_tests_map(self, relationships: List[Dict]) -> Dict[str, List[str]]:
         """Build mapping from requirement ID to list of test IDs that verify it."""

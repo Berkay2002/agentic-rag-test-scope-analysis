@@ -916,10 +916,10 @@ def _run_agent_evaluation(
     click.echo(f"MRR: {summary.mrr_score:.4f}")
 
     for k in k_list:
-        p = summary.avg_precision_at_k.get(k, 0)
-        r = summary.avg_recall_at_k.get(k, 0)
-        click.echo(f"Avg P@{k}: {p:.4f}")
-        click.echo(f"Avg R@{k}: {r:.4f}")
+        precision = summary.avg_precision_at_k.get(k, 0)
+        recall = summary.avg_recall_at_k.get(k, 0)
+        click.echo(f"Avg P@{k}: {precision:.4f}")
+        click.echo(f"Avg R@{k}: {recall:.4f}")
 
     click.echo("\n--- Tool Usage Statistics ---")
     click.echo(f"Total tool calls: {summary.total_tool_calls}")
