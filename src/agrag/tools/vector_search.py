@@ -12,11 +12,8 @@ from langchain_core.tools import tool
 from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
 from agrag.tools.base import (
     BaseToolWrapper,
-    format_search_results_header,
-    format_search_result_item,
-    format_search_results_footer,
-    build_metadata_with_chunk_id,
-    extract_score_or_default,
+    format_search_output,
+    process_search_results,
 )
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
@@ -34,32 +31,11 @@ def _format_vector_output(output: VectorSearchOutput) -> str:
     Returns:
         Formatted string
     """
-    if not output.results:
-        return f"No results found for query: '{output.query}'"
-
-    # Build header
-    header = format_search_results_header(
-        query=output.query,
-        total_results=output.total_results,
-        retrieval_time_ms=output.retrieval_time_ms,
+    return format_search_output(
+        output=output,
         search_type="Vector Search",
+        score_label="Similarity",
     )
-
-    # Format each result
-    result_items = []
-    for i, result in enumerate(output.results, 1):
-        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
-        item = format_search_result_item(
-            index=i,
-            result_id=result.id,
-            score=result.score,
-            score_label="Similarity",
-            content=result.content,
-            entity_type=entity_type,
-        )
-        result_items.append(item)
-
-    return header + "\n".join(result_items)
 
 
 def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
@@ -121,27 +97,20 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
                 metadata_filter=metadata_filter,
             )
 
-            # Format results
-            search_results = []
-            for result in results:
-                # Handle None similarity value - use 0.0 as fallback
-                score = extract_score_or_default(result.get("similarity"))
+            # Format results using shared processing logic
+            # Apply similarity threshold filter if provided
+            score_filter_fn = None
+            if similarity_threshold is not None:
+                def threshold_filter(score: float) -> bool:
+                    return score >= similarity_threshold
+                score_filter_fn = threshold_filter
 
-                if similarity_threshold is not None and score < similarity_threshold:
-                    continue
-
-                metadata = build_metadata_with_chunk_id(
-                    result.get("metadata", {}), result.get("chunk_id")
-                )
-
-                search_result = SearchResult(
-                    id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
-                    content=result.get("content", ""),
-                    score=score,
-                    metadata=metadata,
-                    source="pgvector",
-                )
-                search_results.append(search_result)
+            search_results = process_search_results(
+                raw_results=results,
+                score_field="similarity",
+                source_name="pgvector",
+                score_filter_fn=score_filter_fn,
+            )
 
             retrieval_time_ms = (time.time() - start_time) * 1000
 

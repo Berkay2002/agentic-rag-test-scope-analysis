@@ -13,6 +13,7 @@ from agrag.config import setup_logging, settings
 from agrag.storage import Neo4jClient, PostgresClient
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
+from agrag.cli.utils import extract_message_content
 
 logger = logging.getLogger(__name__)
 
@@ -278,13 +279,7 @@ def query(
                                 final_answer = content
                                 content_preview = content[:100]
                             elif isinstance(content, list):
-                                text_parts = []
-                                for part in content:
-                                    if isinstance(part, dict) and "text" in part:
-                                        text_parts.append(part["text"])
-                                    elif isinstance(part, str):
-                                        text_parts.append(part)
-                                final_answer = "\n".join(text_parts)
+                                final_answer = extract_message_content(content)
                                 content_preview = final_answer[:100]
                             else:
                                 content_preview = str(content)[:100]
@@ -302,16 +297,7 @@ def query(
             for msg in reversed(messages):
                 if hasattr(msg, "type") and msg.type == "ai":
                     if hasattr(msg, "content") and msg.content:
-                        if isinstance(msg.content, str):
-                            final_answer = msg.content
-                        elif isinstance(msg.content, list):
-                            text_parts = []
-                            for part in msg.content:
-                                if isinstance(part, dict) and "text" in part:
-                                    text_parts.append(part["text"])
-                                elif isinstance(part, str):
-                                    text_parts.append(part)
-                            final_answer = "\n".join(text_parts)
+                        final_answer = extract_message_content(msg.content)
                         break
 
             # Count tool calls and model calls from messages

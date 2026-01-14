@@ -3,7 +3,7 @@
 Provides common functionality shared across search tools to reduce code duplication.
 """
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Callable
 
 
 class BaseToolWrapper:
@@ -151,3 +151,105 @@ def extract_score_or_default(
         Float score value
     """
     return float(score_value) if score_value is not None else default
+
+
+def format_search_output(
+    output: Any,
+    search_type: str,
+    score_label: str,
+    additional_info: Optional[str] = None,
+    footer_note: Optional[str] = None,
+) -> str:
+    """Format search output for agent consumption.
+
+    Generic formatter that works with VectorSearchOutput, HybridSearchOutput,
+    or any output object with results, query, total_results, and retrieval_time_ms attributes.
+
+    Args:
+        output: Search output object (must have results, query, total_results, retrieval_time_ms)
+        search_type: Type of search (e.g., "Vector Search", "Hybrid Search")
+        score_label: Label for the score (e.g., "Similarity", "RRF Score")
+        additional_info: Optional additional information (e.g., fusion method)
+        footer_note: Optional footer note to append
+
+    Returns:
+        Formatted string
+    """
+    if not output.results:
+        return f"No results found for query: '{output.query}'"
+
+    # Build header
+    header = format_search_results_header(
+        query=output.query,
+        total_results=output.total_results,
+        retrieval_time_ms=output.retrieval_time_ms,
+        search_type=search_type,
+        additional_info=additional_info,
+    )
+
+    # Format each result
+    result_items = []
+    for i, result in enumerate(output.results, 1):
+        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
+        item = format_search_result_item(
+            index=i,
+            result_id=result.id,
+            score=result.score,
+            score_label=score_label,
+            content=result.content,
+            entity_type=entity_type,
+        )
+        result_items.append(item)
+
+    # Add footer if provided
+    footer = format_search_results_footer(footer_note)
+
+    return header + "\n".join(result_items) + footer
+
+
+def process_search_results(
+    raw_results: List[dict],
+    score_field: str,
+    source_name: str,
+    score_filter_fn: Optional[Callable[[float], bool]] = None,
+) -> List["SearchResult"]:
+    """Process raw search results into SearchResult objects.
+
+    Args:
+        raw_results: List of raw result dictionaries from the database
+        score_field: Name of the score field in raw results (e.g., "similarity", "rrf_score")
+        source_name: Name of the search source (e.g., "pgvector", "hybrid")
+        score_filter_fn: Optional function that takes a score (float) and returns True to keep
+            the result or False to filter it out. Example: lambda s: s >= 0.5
+
+    Returns:
+        List of SearchResult objects (filtered if score_filter_fn provided)
+    """
+    from agrag.tools.schemas import SearchResult
+
+    search_results = []
+    for result in raw_results:
+        # Extract score with fallback to 0.0
+        score = extract_score_or_default(result.get(score_field))
+
+        # Apply score filter if provided
+        if score_filter_fn and not score_filter_fn(score):
+            continue
+
+        # Build metadata including chunk_id if present
+        metadata = build_metadata_with_chunk_id(
+            result.get("metadata", {}), result.get("chunk_id")
+        )
+
+        # Create SearchResult object
+        search_result = SearchResult(
+            id=metadata.get("entity_id") or result.get("chunk_id", "unknown"),
+            content=result.get("content", ""),
+            score=score,
+            metadata=metadata,
+            source=source_name,
+        )
+        search_results.append(search_result)
+
+    return search_results
+

@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from agrag.config import settings
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
+from agrag.cli.utils import extract_message_content
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +26,7 @@ def _iso_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _extract_content(content: Any) -> str:
-    """Extract text content from model or tool message payloads."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        text_parts = []
-        for part in content:
-            if isinstance(part, dict) and "text" in part:
-                text_parts.append(part["text"])
-            elif isinstance(part, str):
-                text_parts.append(part)
-        return "\n".join(text_parts)
-    if isinstance(content, dict) and "text" in content:
-        return str(content["text"])
-    return str(content)
+# Content extraction is now handled by agrag.cli.utils.extract_message_content
 
 
 def _is_tool_error(output: str) -> bool:
@@ -256,7 +243,7 @@ def run_headless(
                                 }
                             )
                 elif last_message.content:
-                    final_answer = _extract_content(last_message.content)
+                    final_answer = extract_message_content(last_message.content)
                     if output_format == "stream-json":
                         _emit_json_event(
                             {
@@ -269,7 +256,7 @@ def run_headless(
 
             elif isinstance(last_message, ToolMessage):
                 tool_call_id = str(last_message.tool_call_id or "")
-                output_text = _extract_content(last_message.content)
+                output_text = extract_message_content(last_message.content)
                 result_meta = tool_stats.record_result(tool_call_id, output_text)
                 if output_format == "stream-json":
                     _emit_json_event(

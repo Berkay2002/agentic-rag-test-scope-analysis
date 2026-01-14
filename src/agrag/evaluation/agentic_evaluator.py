@@ -25,6 +25,7 @@ from agrag.evaluation.entity_extractor import (
 from agrag.evaluation.tool_tracker import (
     ToolTracker,
 )
+from agrag.cli.utils import extract_message_content
 
 logger = logging.getLogger(__name__)
 
@@ -213,16 +214,7 @@ class AgenticEvaluator:
                     # Check if this is a final response (no tool calls)
                     if not (hasattr(msg, "tool_calls") and msg.tool_calls):
                         if hasattr(msg, "content") and msg.content:
-                            if isinstance(msg.content, str):
-                                final_answer = msg.content
-                            elif isinstance(msg.content, list):
-                                text_parts = []
-                                for part in msg.content:
-                                    if isinstance(part, dict) and "text" in part:
-                                        text_parts.append(part["text"])
-                                    elif isinstance(part, str):
-                                        text_parts.append(part)
-                                final_answer = "\n".join(text_parts)
+                            final_answer = extract_message_content(msg.content)
 
             result.final_answer = final_answer
             result.tool_call_count = tool_call_count
