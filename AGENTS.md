@@ -2,222 +2,79 @@
 
 ## Project Overview
 
-This is an **Agentic GraphRAG system** for test scope analysis in telecommunications software. It combines Knowledge Graphs (Neo4j), Vector Search (pgvector), and LangGraph-based agent orchestration to analyze test coverage and dependencies.
+**Agentic GraphRAG system** for test scope analysis in telecommunications software.
 
-**Core Technologies:**
-- **Language**: Python 3.11+
-- **Agent Framework**: LangGraph (custom StateGraph) + LangChain
-- **LLM**: Google Generative AI (Gemini 2.0 Flash)
-- **Databases**: Neo4j (knowledge graph only) + PostgreSQL/Neon (pgvector + pg_search BM25)
-- **Observability**: LangSmith (full tracing)
-- **Package Manager**: Poetry
+**Stack:**
+- Python 3.11+, Poetry
+- LangGraph + LangChain
+- Google Gemini LLM
+- Neo4j (knowledge graph) + PostgreSQL/Neon (pgvector HNSW + pg_search BM25)
+- LangSmith tracing
 
-**Architecture**: Custom ReAct agent with 4 retrieval tools operating on a dual-database architecture (PostgreSQL for retrieval, Neo4j for explicit graph materialization and traversal):
-- **Neo4j**: Knowledge graph for entity relationships and graph traversal
-- **PostgreSQL/Neon**: All retrieval (pgvector for semantic search, pg_search for BM25 keyword search, RRF hybrid fusion)
+**Architecture**: ReAct agent with 4 retrieval tools. Dual DB: PostgreSQL for retrieval, Neo4j for graph traversal.
 
-## Setup Commands
-
-### Initial Setup
+## Setup
 
 ```bash
-# Clone and navigate
-git clone <repository-url>
-cd agentic-rag-test-scope-analysis
-
-# Install dependencies
 poetry install
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your credentials (see Configuration section below)
-nano .env
+cp .env.example .env  # Add API keys, DB creds
+poetry run agrag init  # Creates DB schemas, indexes
 ```
 
-### Database Initialization
+**Required env vars:**
+- `GOOGLE_API_KEY`, `NEO4J_URI`, `NEO4J_PASSWORD`, `NEON_CONNECTION_STRING`
+- Optional: `LANGCHAIN_API_KEY` (for tracing)
 
+**Generate data:**
 ```bash
-# Initialize Neo4j and PostgreSQL schemas
-poetry run agrag init
-```
-
-This creates:
-- Neo4j constraints for entity uniqueness
-- Neo4j indexes for graph traversal
-- PostgreSQL pgvector extension and HNSW vector index (768-dim, cosine similarity)
-- PostgreSQL pg_search extension and BM25 inverted index for keyword search
-
-### Generate Synthetic Test Data
-
-```bash
-# Generate telecommunications dataset (requirements, test cases, functions, etc.)
 poetry run agrag generate --requirements 50 --testcases 200
-
-# Ingest generated data into databases
 poetry run agrag ingest data/synthetic_dataset.json
 ```
 
-### Configuration
-
-Required environment variables in `.env`:
-
-```bash
-# Google AI (REQUIRED)
-GOOGLE_API_KEY=your_key_here
-GOOGLE_THINKING_LEVEL=low  # optional: low/high reasoning depth (Gemini 3)
-GOOGLE_THINKING_BUDGET=256  # optional: token budget for Gemini 2.5
-
-# Neo4j (REQUIRED - use Neo4j Aura or local instance)
-NEO4J_URI=neo4j+s://your_instance.databases.neo4j.io
-NEO4J_PASSWORD=your_password
-
-# PostgreSQL/Neon (REQUIRED)
-NEON_CONNECTION_STRING=postgresql://user:pass@host:5432/dbname?sslmode=require
-
-# LangSmith (OPTIONAL - for observability)
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_langsmith_key
-LANGCHAIN_PROJECT=agrag-test-scope-analysis
-```
-
-## Development Workflow
-
-### Project Structure
+## Project Structure
 
 ```
 src/agrag/
-├── cli/              # Click-based CLI application
-├── config/           # Settings (Pydantic) + logging
-├── core/             # StateGraph agent (nodes, state, graph)
+├── cli/              # Click-based CLI
+├── config/           # Pydantic settings, logging
+├── core/             # StateGraph agent (state, graph)
 ├── tools/            # 4 retrieval tools + schemas
-├── storage/          # Neo4j + PostgreSQL clients
-├── models/           # LLM + embedding wrappers
+├── storage/          # Neo4j, PostgreSQL clients
+├── models/           # LLM, embeddings
 ├── kg/               # Knowledge graph ontology
-├── data/             # Data generators + ingestion
-├── evaluation/       # Metrics (Precision@k, MAP, MRR)
-└── observability/    # LangSmith utilities
+├── data/             # Data generators, ingestion
+├── evaluation/       # P@k, MAP, MRR metrics
+└── observability/    # LangSmith
 ```
 
-### Repo-Local Codex Skills
+**Codex skills**: `.codex/skills/` - Lightweight agent commands
 
-This repo keeps lightweight, agent-consumable “skills” under `.codex/skills/` (each skill is a folder
-containing a `SKILL.md`, and optionally `references/`, `assets/`, and `scripts/`).
-
-- When working in `src/`, prefer consulting the most relevant skill(s) first (e.g., Neo4j/Cypher,
-  hybrid retrieval, evaluation) and follow their checklists/patterns.
-- Keep project guidance in `README.md`, `AGENTS.md`, and `.codex/skills/` (the legacy `docs/` folder
-  is intentionally not used anymore).
-
-### Running the Agent
+## Running the Agent
 
 ```bash
-# Interactive chat mode (safe by default - you approve each action)
+# Interactive chat (safe mode - approves each tool)
 poetry run agrag chat
-
-# Resume a previous conversation
 poetry run agrag chat --thread-id my-session
 
-# YOLO mode (autonomous execution without approvals)
+# YOLO mode (autonomous execution)
 poetry run agrag chat --yolo
 
-# Headless mode (non-interactive, for scripting)
-poetry run agrag -p "What tests cover handover requirements?"
+# Headless (scripting)
+poetry run agrag -p "query here"
+poetry run agrag -p "query" --output-format json
 
-# Headless streaming JSON (JSONL)
-poetry run agrag -p "Analyze dependencies" --output-format stream-json
-
-# Headless persistent session (requires Postgres checkpointer)
-poetry run agrag -p "List handover requirements" --thread-id eval-001
-poetry run agrag -p "Now show tests that verify those" --thread-id eval-001
-
-# Single query (non-interactive, for scripting)
-poetry run agrag query "What tests cover handover requirements?"
-
-# Query with streaming output (default)
-poetry run agrag query "Find authentication test cases" --stream
-
-# Query with HITL checkpointing
-poetry run agrag query "Show dependencies for initiate_handover" --checkpoint --thread-id session-123
-
-# Show system configuration
-poetry run agrag info
+# Single query
+poetry run agrag query "your question"
+poetry run agrag query "q" --stream
+poetry run agrag info  # Show config
 ```
 
-#### Interactive Chat Mode
+### Chat Commands
 
-The `agrag chat` command starts an interactive REPL session similar to Claude Code, Codex, or Copilot CLI.
+`/help`, `/clear`, `/history`, `/stats`, `/reset`, `/save`, `/export`, `/verbose`, `/thinking [preset]`, `/exit`
 
-**Features:**
-- Natural conversation with the agent
-- **Automatic conversation persistence** (all chats are saved by default)
-- Real-time streaming responses
-- Command shortcuts (`/help`, `/stats`, `/exit`, etc.)
-- Session resumption via thread IDs
-- **Safe by default** - you approve each tool execution
-
-**Understanding Modes:**
-
-- **Safe Mode (Default)**: Agent asks for approval before each tool execution
-  - You see: "I want to run vector_search with query X"
-  - You decide: approve, reject, or modify
-  - ✅ Safer, you control everything
-  - Best for: normal usage, learning, sensitive operations
-
-- **YOLO Mode** (`--yolo`): Agent executes autonomously
-  - Agent runs tools without asking
-  - Faster workflow
-  - ⚠️ Less control - agent decides everything
-  - Best for: trusted workflows, demos, when you're confident
-
-**Available Commands in Chat:**
-- `/help` - Show help message
-- `/clear` - Clear the screen
-- `/history` - View conversation history
-- `/stats` - Show session statistics
-- `/reset` - Start a new conversation
-- `/save` - Save conversation to file
-- `/export` - Export conversation transcript (use `--verbose` for tool args/results)
-- `/verbose` - Toggle tool call arguments in output
-- `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
-- `/exit` or `/quit` - Exit chat
-
-**Example Chat Session:**
-```
-AgRAG Interactive Chat
-
-Session ID: chat-a1b2c3d4
-Your conversation is automatically saved.
-Resume with: agrag chat --thread-id chat-a1b2c3d4
-
-🚦 Safe Mode (HITL)
-The agent will ask for your approval before executing each tool.
-
-You: What tests cover handover requirements?
-
-🚦 Approval Required
-The agent wants to execute: vector_search(query="handover requirements tests", k=10)
-
-Approve? (yes/no/edit): yes
-✓ Approved. Continuing...
-
-🔧 Executing: vector_search
-📝 Found 8 results...
-
-Agent Response:
-Based on the search results, here are the test cases covering handover requirements:
-- TC_HANDOVER_001: X2 handover between eNodeBs
-- TC_HANDOVER_003: S1 handover validation
-...
-
-Tool calls: 1 | Model calls: 1
-
-You: /stats
-Session Statistics:
-- Messages: 1
-- Tool calls: 1
-- Mode: 🚦 Safe Mode (you approve each tool)
-```
+### Chat Commands
+`/help`, `/clear`, `/history`, `/stats`, `/reset`, `/save`, `/export`, `/verbose`, `/thinking [preset]`, `/exit`
 
 ### Working with Data
 
