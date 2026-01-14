@@ -1,6 +1,7 @@
 """Storage writers for PostgreSQL, Neo4j, and BM25 indexing."""
 
 from typing import Dict, Any, List, Optional
+from abc import ABC, abstractmethod
 import json
 import logging
 
@@ -13,15 +14,116 @@ from agrag.storage.bm25_retriever import BM25RetrieverManager
 logger = logging.getLogger(__name__)
 
 
-class GraphWriter:
+class BaseWriter(ABC):
+    """Abstract base class for storage writers with common functionality."""
+
+    def __init__(self):
+        """Initialize base writer with stats tracking."""
+        self.stats = self._init_stats()
+
+    def _init_stats(self) -> Dict[str, int]:
+        """Initialize statistics dictionary.
+
+        Returns:
+            Dict with default stat counters
+        """
+        return {"writes": 0, "failures": 0}
+
+    @abstractmethod
+    def _write_entity_impl(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Implementation-specific entity write logic.
+
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
+
+        Returns:
+            True if write successful, False otherwise
+        """
+        pass
+
+    def write_entity(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Write a single entity with error handling.
+
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
+
+        Returns:
+            True if write successful, False otherwise
+        """
+        try:
+            return self._write_entity_impl(entity, entity_type)
+        except Exception as e:
+            logger.error(
+                "%s write failed for %s: %s",
+                self.__class__.__name__,
+                entity.get("id"),
+                e,
+            )
+            self.stats["failures"] += 1
+            return False
+
+    def write_entities_batch(
+        self,
+        entities: List[Dict[str, Any]],
+        entity_type: str,
+        batch_size: int = 100,
+    ) -> int:
+        """Write multiple entities in batch with progress logging.
+
+        Args:
+            entities: List of entity data to write
+            entity_type: Type of the entities
+            batch_size: Batch size for progress logging
+
+        Returns:
+            Number of successful writes
+        """
+        total = len(entities)
+        successes = 0
+
+        logger.info(
+            "Writing %d %s entities to %s...",
+            total,
+            entity_type,
+            self.__class__.__name__,
+        )
+
+        for i, entity in enumerate(entities, 1):
+            if self.write_entity(entity, entity_type):
+                successes += 1
+
+            if i % batch_size == 0:
+                logger.info("Progress: %d/%d entities written", i, total)
+
+        logger.info("%s batch write complete: %d successes", self.__class__.__name__, successes)
+        return successes
+
+
+class GraphWriter(BaseWriter):
     """Write entities to Neo4j when graph materialization is intended."""
 
     def __init__(self, neo4j_client: Optional[Neo4jClient] = None):
+        """Initialize GraphWriter.
+
+        Args:
+            neo4j_client: Neo4j client instance (creates new if not provided)
+        """
+        super().__init__()
         self.neo4j_client = neo4j_client or Neo4jClient()
-        self.stats = {"writes": 0, "failures": 0}
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     def _write_neo4j(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Write entity to Neo4j with retry logic.
+
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
+
+        Returns:
+            True if write successful
+        """
         entity_copy = entity.copy()
         if "embedding" in entity_copy:
             del entity_copy["embedding"]
@@ -39,44 +141,41 @@ class GraphWriter:
         self.stats["writes"] += 1
         return bool(result)
 
-    def write_entity(self, entity: Dict[str, Any], entity_type: str) -> bool:
-        try:
-            return self._write_neo4j(entity, entity_type)
-        except Exception as e:
-            logger.error("Neo4j write failed for %s: %s", entity.get("id"), e)
-            self.stats["failures"] += 1
-            return False
+    def _write_entity_impl(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Implementation of entity write for Neo4j.
 
-    def write_entities_batch(
-        self,
-        entities: List[Dict[str, Any]],
-        entity_type: str,
-        batch_size: int = 100,
-    ) -> int:
-        total = len(entities)
-        successes = 0
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
 
-        logger.info("Writing %d %s entities to Neo4j...", total, entity_type)
-
-        for i, entity in enumerate(entities, 1):
-            if self.write_entity(entity, entity_type):
-                successes += 1
-
-            if i % batch_size == 0:
-                logger.info("Progress: %d/%d entities written", i, total)
-
-        logger.info("Neo4j batch write complete: %d successes", successes)
-        return successes
+        Returns:
+            True if write successful
+        """
+        return self._write_neo4j(entity, entity_type)
 
 
-class PostgresWriter:
+class PostgresWriter(BaseWriter):
     """Write entities with embeddings to PostgreSQL for retrieval."""
 
     def __init__(self, postgres_client: Optional[PostgresClient] = None):
+        """Initialize PostgresWriter.
+
+        Args:
+            postgres_client: PostgreSQL client instance (creates new if not provided)
+        """
+        super().__init__()
         self.postgres_client = postgres_client or PostgresClient()
-        self.stats = {"writes": 0, "skipped": 0, "failures": 0}
+        self.stats["skipped"] = 0  # Add skipped stat for PostgresWriter
 
     def _build_content(self, entity: Dict[str, Any]) -> str:
+        """Build searchable content from entity fields.
+
+        Args:
+            entity: Entity data
+
+        Returns:
+            Concatenated content string
+        """
         content_parts = [
             entity.get("id", ""),
             entity.get("title", ""),
@@ -90,6 +189,15 @@ class PostgresWriter:
         return " ".join(str(p) for p in content_parts if p)
 
     def _build_metadata(self, entity: Dict[str, Any], entity_type: str) -> Dict[str, Any]:
+        """Build metadata from entity fields.
+
+        Args:
+            entity: Entity data
+            entity_type: Type of the entity
+
+        Returns:
+            Metadata dictionary
+        """
         metadata = {"entity_type": entity_type, "entity_id": entity.get("id")}
         for key in [
             "file_path",
@@ -112,6 +220,15 @@ class PostgresWriter:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     def _write_postgres(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Write entity to PostgreSQL with retry logic.
+
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
+
+        Returns:
+            True if write successful, False if skipped
+        """
         if "embedding" not in entity or entity["embedding"] is None:
             logger.warning("No embedding for %s, skipping PostgreSQL", entity.get("id"))
             self.stats["skipped"] += 1
@@ -130,37 +247,20 @@ class PostgresWriter:
         self.stats["writes"] += 1
         return True
 
-    def write_entity(self, entity: Dict[str, Any], entity_type: str) -> bool:
-        try:
-            return self._write_postgres(entity, entity_type)
-        except Exception as e:
-            logger.error("PostgreSQL write failed for %s: %s", entity.get("id"), e)
-            self.stats["failures"] += 1
-            return False
+    def _write_entity_impl(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Implementation of entity write for PostgreSQL.
 
-    def write_entities_batch(
-        self,
-        entities: List[Dict[str, Any]],
-        entity_type: str,
-        batch_size: int = 100,
-    ) -> int:
-        total = len(entities)
-        successes = 0
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
 
-        logger.info("Writing %d %s entities to PostgreSQL...", total, entity_type)
-
-        for i, entity in enumerate(entities, 1):
-            if self.write_entity(entity, entity_type):
-                successes += 1
-
-            if i % batch_size == 0:
-                logger.info("Progress: %d/%d entities written", i, total)
-
-        logger.info("PostgreSQL batch write complete: %d successes", successes)
-        return successes
+        Returns:
+            True if write successful
+        """
+        return self._write_postgres(entity, entity_type)
 
 
-class BM25Writer:
+class BM25Writer(BaseWriter):
     """Write entities to BM25 for keyword search."""
 
     def __init__(
@@ -168,11 +268,25 @@ class BM25Writer:
         bm25_manager: Optional[BM25RetrieverManager] = None,
         index_path: str = "data/bm25_index.pkl",
     ):
+        """Initialize BM25Writer.
+
+        Args:
+            bm25_manager: BM25 retriever manager instance (creates new if not provided)
+            index_path: Path to save the BM25 index
+        """
+        super().__init__()
         self.bm25_manager = bm25_manager or BM25RetrieverManager()
         self.index_path = index_path
-        self.stats = {"writes": 0, "failures": 0}
 
     def _build_content(self, entity: Dict[str, Any]) -> str:
+        """Build searchable content from entity fields.
+
+        Args:
+            entity: Entity data
+
+        Returns:
+            Concatenated content string
+        """
         content_parts = [
             entity.get("id", ""),
             entity.get("title", ""),
@@ -189,6 +303,15 @@ class BM25Writer:
         return " ".join(str(p) for p in content_parts if p)
 
     def _build_metadata(self, entity: Dict[str, Any], entity_type: str) -> Dict[str, Any]:
+        """Build metadata from entity fields.
+
+        Args:
+            entity: Entity data
+            entity_type: Type of the entity
+
+        Returns:
+            Metadata dictionary
+        """
         return {
             "entity_type": entity_type,
             "entity_id": entity.get("id"),
@@ -197,6 +320,15 @@ class BM25Writer:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     def _write_bm25(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Write entity to BM25 with retry logic.
+
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
+
+        Returns:
+            True if write successful, False if content is empty
+        """
         content = self._build_content(entity)
         if not content.strip():
             return False
@@ -206,36 +338,24 @@ class BM25Writer:
         self.stats["writes"] += 1
         return True
 
-    def write_entity(self, entity: Dict[str, Any], entity_type: str) -> bool:
-        try:
-            return self._write_bm25(entity, entity_type)
-        except Exception as e:
-            logger.error("BM25 write failed for %s: %s", entity.get("id"), e)
-            self.stats["failures"] += 1
-            return False
+    def _write_entity_impl(self, entity: Dict[str, Any], entity_type: str) -> bool:
+        """Implementation of entity write for BM25.
 
-    def write_entities_batch(
-        self,
-        entities: List[Dict[str, Any]],
-        entity_type: str,
-        batch_size: int = 100,
-    ) -> int:
-        total = len(entities)
-        successes = 0
+        Args:
+            entity: Entity data to write
+            entity_type: Type of the entity
 
-        logger.info("Writing %d %s entities to BM25...", total, entity_type)
-
-        for i, entity in enumerate(entities, 1):
-            if self.write_entity(entity, entity_type):
-                successes += 1
-
-            if i % batch_size == 0:
-                logger.info("Progress: %d/%d entities written", i, total)
-
-        logger.info("BM25 batch write complete: %d successes", successes)
-        return successes
+        Returns:
+            True if write successful
+        """
+        return self._write_bm25(entity, entity_type)
 
     def persist_index(self, file_path: Optional[str] = None) -> None:
+        """Persist the BM25 index to disk.
+
+        Args:
+            file_path: Path to save the index (uses default if not provided)
+        """
         path = file_path or self.index_path
         try:
             self.bm25_manager.save(path)
