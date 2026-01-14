@@ -7,8 +7,13 @@ import uuid
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from agrag.cli.thinking import handle_thinking_command, format_thinking_budget
+
+# Import colors from display module
+from agrag.cli.display import COLORS
 
 
 class ChatSessionProtocol(Protocol):
@@ -37,26 +42,47 @@ def print_help(console: Console) -> None:
     Args:
         console: Rich console for output.
     """
-    help_text = """
-**Commands:**
-- `/help` - Show this help
-- `/clear` - Clear screen
-- `/history` - Show message history
-- `/stats` - Show statistics
-- `/reset` - Start new conversation
-- `/save` - Save conversation to file
-- `/export` - Export conversation transcript (use --verbose for tool details)
-- `/verbose` - Toggle tool call arguments and logs in output
-- `/thinking [preset]` - View or set thinking budget
-- `/exit`, `/quit` - Exit chat
+    # Create commands table
+    commands_table = Table(show_header=False, box=None, padding=(0, 1, 0, 0))
+    commands_table.add_column("Command", style=COLORS["accent"], width=12, no_wrap=True)
+    commands_table.add_column("Description", style="white")
+    commands_table.add_row("/help", "Show this help message")
+    commands_table.add_row("/clear", "Clear the screen")
+    commands_table.add_row("/history", "Show message history")
+    commands_table.add_row("/stats", "Show conversation statistics")
+    commands_table.add_row("/reset", "Start new conversation")
+    commands_table.add_row("/save", "Save conversation to file")
+    commands_table.add_row("/export [file] [--verbose]", "Export conversation transcript")
+    commands_table.add_row("/verbose [on|off]", "Toggle tool call details")
+    commands_table.add_row("/thinking [budget]", "View or set thinking budget")
+    commands_table.add_row("/exit, /quit", "Exit the chat")
 
+    # Example queries
+    examples_text = """\
 **Example Queries:**
-- "What tests cover handover requirements?"
-- "Find all test cases related to authentication"
-- "Show me functions called by initiate_handover"
-- "Which requirements depend on REQ_AUTH_005?"
+
+• "What tests cover handover requirements?"
+
+• "Find all test cases related to authentication"
+
+• "Show me functions called by initiate_handover"
+
+• "Which requirements depend on REQ_AUTH_005?"
 """
-    console.print(Panel(Markdown(help_text), title="Help", border_style="blue"))
+
+    # Title
+    title = Text()
+    title.append("❓ ", style=COLORS["accent"])
+    title.append("Help", style=f"bold {COLORS['accent']}")
+
+    content = Text()
+    content.append(commands_table)
+    content.append("\n")
+    content.append(Markdown(examples_text))
+
+    console.print()
+    console.print(Panel(content, title=title, border_style=COLORS["accent"], padding=(1, 2)))
+    console.print()
 
 
 def print_stats(console: Console, session: ChatSessionProtocol) -> None:
@@ -67,23 +93,38 @@ def print_stats(console: Console, session: ChatSessionProtocol) -> None:
         session: Chat session with statistics.
     """
     duration = datetime.now() - session.start_time
-    mode = (
-        "🚦 Safe Mode (you approve each tool)"
-        if session.enable_hitl
-        else "⚡ YOLO Mode (autonomous)"
-    )
-    stats = f"""
-**Session Statistics:**
-- Session ID: `{session.thread_id}`
-- Messages: {session.message_count}
-- Total Tool Calls: {session.tool_calls_total}
-- Total Model Calls: {session.model_calls_total}
-- Duration: {duration.seconds // 60}m {duration.seconds % 60}s
-- Persistence: {session._persistence_label()}
-- Mode: {mode}
-- Thinking Budget: {format_thinking_budget(session.thinking_budget)}
-"""
-    console.print(Panel(Markdown(stats), title="Statistics", border_style="cyan"))
+
+    # Create stats table
+    stats_table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    stats_table.add_column("", style=COLORS["neutral"], width=20)
+    stats_table.add_column("", style="white")
+
+    stats_table.add_row("Session ID:", f"{session.thread_id}")
+    stats_table.add_row("Messages:", f"{session.message_count}")
+    stats_table.add_row("Total Tool Calls:", f"{session.tool_calls_total}")
+    stats_table.add_row("Total Model Calls:", f"{session.model_calls_total}")
+    stats_table.add_row("Duration:", f"{duration.seconds // 60}m {duration.seconds % 60}s")
+    stats_table.add_row("Persistence:", f"{session._persistence_label()}")
+
+    mode_text = "Safe Mode (you approve each tool)" if session.enable_hitl else "YOLO Mode (autonomous)"
+    mode_icon = "🛡️" if session.enable_hitl else "⚡"
+    mode_style = COLORS["primary"] if session.enable_hitl else COLORS["warning"]
+    mode_display = Text()
+    mode_display.append(f"{mode_icon} ", style=mode_style)
+    mode_display.append(mode_text, style=mode_style)
+    stats_table.add_row("Mode:", mode_display)
+
+    stats_table.add_row("Thinking Budget:", f"{format_thinking_budget(session.thinking_budget)}")
+
+    # Title
+    title = Text()
+    title.append("📊 ", style=COLORS["primary"])
+    title.append("Session Statistics", style=f"bold {COLORS['primary']}")
+
+    console.print()
+    console.print(Panel(stats_table, title=title, border_style=COLORS["primary"], padding=(1, 2)))
+    console.print()
+
 
 
 def save_conversation(console: Console, thread_id: str) -> None:

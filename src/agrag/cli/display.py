@@ -1,10 +1,25 @@
 """Display utilities for interactive chat."""
 
 import json
+import time
+from datetime import datetime
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.text import Text
+from rich.table import Table
+
+# Modern minimalist color palette
+COLORS = {
+    "primary": "#00D4AA",  # Green accent for success/responses
+    "accent": "#5EB0FF",   # Blue accent for info/tool calls
+    "warning": "#FFB800",  # Yellow accent for warnings/pending
+    "error": "#FF5B5B",    # Red accent for errors/critical
+    "neutral": "#8B8B8B",  # Subtle gray for secondary text
+    "bg_subtle": "#2B2B2B", # Dark background for code blocks
+    "text": "#EAEAEA",     # Primary text color
+}
 
 
 def print_welcome(
@@ -21,47 +36,77 @@ def print_welcome(
         checkpointer_backend: Backend type ("postgres", "memory", or empty).
         enable_hitl: Whether HITL mode is enabled.
     """
-    welcome = """
-# AgRAG Interactive Chat
+    # Create session info badge
+    session_info = Text()
+    session_info.append(" ", style="white")
+    session_info.append(f"{thread_id}", style=COLORS["accent"])
 
-Welcome to the Agentic GraphRAG Test Scope Analysis system!
+    # Create mode badge
+    mode_text = "Safe Mode" if enable_hitl else "YOLO Mode"
+    mode_color = COLORS["primary"] if enable_hitl else COLORS["warning"]
+    mode_icon = "🛡️" if enable_hitl else "⚡"
+    mode_badge = Text()
+    mode_badge.append(f"{mode_icon} {mode_text}", style=mode_color)
 
-**Available Commands:**
-- `/help` - Show this help message
-- `/clear` - Clear the screen
-- `/history` - Show conversation history
-- `/stats` - Show conversation statistics
-- `/reset` - Reset conversation (start fresh)
-- `/save` - Save conversation to file
-- `/export` - Export conversation transcript (use --verbose for tool details)
-- `/verbose` - Toggle tool call arguments and logs in output
-- `/exit` or `/quit` - Exit the chat
+    # Create persistence info
+    persistence = "PostgreSQL (durable)" if checkpointer_backend == "postgres" else "In-memory (session only)"
+    persistence_color = COLORS["primary"] if checkpointer_backend == "postgres" else COLORS["warning"]
 
+    # Build commands table
+    commands_table = Table(show_header=False, box=None, padding=(0, 1, 0, 0))
+    commands_table.add_column("Command", style=COLORS["accent"], width=12)
+    commands_table.add_column("Description")
+    commands_table.add_row("/help", "Show available commands")
+    commands_table.add_row("/clear", "Clear the screen")
+    commands_table.add_row("/history", "Show message history")
+    commands_table.add_row("/stats", "Show conversation statistics")
+    commands_table.add_row("/reset", "Start new conversation")
+    commands_table.add_row("/save", "Save conversation to file")
+    commands_table.add_row("/export", "Export transcript (add --verbose for tool details)")
+    commands_table.add_row("/verbose", "Toggle tool call arguments")
+    commands_table.add_row("/thinking", "View or set thinking budget")
+    commands_table.add_row("/exit", "Exit the chat")
+
+    # Build tips
+    tips_text = """\
 **Tips:**
-- Ask questions about test coverage, dependencies, and requirements
-- The agent has access to vector search, keyword search, graph traversal, and hybrid search tools
-- Type naturally - the agent will understand your intent and select the right tools
-"""
+
+• Ask about test coverage, dependencies, and requirements
+
+• The agent has access to vector search, keyword search, \
+graph traversal, and hybrid search tools
+
+• Type naturally—the agent will understand your intent
+
+**Persistence:**
+""" + f"{persistence}"
+
     if checkpointer_backend == "postgres":
-        welcome += f"\n**Session ID:** `{thread_id}`\n"
-        welcome += "Your conversation is automatically saved and can be resumed later.\n"
-        welcome += f"Resume with: `agrag chat --thread-id {thread_id}`\n"
-    elif checkpointer_backend == "memory":
-        welcome += f"\n**Session ID:** `{thread_id}`\n"
-        welcome += (
-            "Session data is stored in memory for this run only (cannot be resumed after exit).\n"
-        )
+        tips_text += f"""
 
-    if enable_hitl:
-        welcome += "\n**🚦 Safe Mode (HITL)**\n"
-        welcome += "The agent will ask for your approval before executing each tool.\n"
-        welcome += "This lets you see and control exactly what the agent does.\n"
-    else:
-        welcome += "\n**⚡ YOLO Mode Active**\n"
-        welcome += "The agent is executing autonomously without asking for approval.\n"
-        welcome += "Use this mode only when you trust the agent completely.\n"
+**Resume Session:**
+`agrag chat --thread-id {thread_id}`"""
 
-    console.print(Panel(Markdown(welcome), title="AgRAG Chat", border_style="green"))
+    # Create the layout
+    content = Group(
+        Text("AgRAG Interactive Chat", style=f"bold {COLORS['primary']}", justify="center"),
+        Text("Agentic GraphRAG for Test Scope Analysis", style=COLORS["neutral"], justify="center"),
+        Text("\n"),  # Spacing
+        commands_table,
+        Text("\n"),  # Spacing
+        Markdown(tips_text)
+    )
+
+    # Create the main panel
+    panel = Panel(
+        content,
+        title=f"{mode_badge} • Session",
+        subtitle=session_info,
+        border_style=COLORS["primary"],
+        padding=(1, 2),
+    )
+
+    console.print(panel)
     console.print()
 
 
@@ -72,12 +117,20 @@ def print_agent_response(console: Console, response: str) -> None:
         console: Rich console for output.
         response: The agent's response text.
     """
+    # Add subtle header with timestamp
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    header = Text()
+    header.append("● ", style=COLORS["primary"])
+    header.append("Assistant", style=f"bold {COLORS['primary']}")
+    header.append(f"  {timestamp}", style="dim")
+
     console.print()
+    console.print(header)
     console.print(
         Panel(
             Markdown(response),
-            title="Agent Response",
-            border_style="green",
+            title=None,
+            border_style=COLORS["primary"],
             padding=(1, 2),
         )
     )
@@ -87,13 +140,39 @@ def print_tool_call(
     console: Console, tool_name: str, tool_call_id: str, arguments: dict
 ) -> None:
     """Print tool call details when verbose mode is enabled."""
+    # Header with timestamp
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    header = Text()
+    header.append("⚡ ", style=COLORS["accent"])
+    header.append("Tool Call  ", style=f"bold {COLORS['accent']}")
+    header.append(f"{timestamp}", style="dim")
+
+    console.print()
+    console.print(header)
+
+    # Tool name and ID
+    tool_info = Text()
+    tool_info.append("Tool: ", style=COLORS["neutral"])
+    tool_info.append(f"{tool_name}\n", style=COLORS["accent"])
+    tool_info.append("ID: ", style=COLORS["neutral"])
+    tool_info.append(tool_call_id or "n/a", style="dim")
+
     args_json = json.dumps(arguments, indent=2, ensure_ascii=True, default=str)
-    content = (
-        f"**Tool Call:** `{tool_name}`\n\n"
-        f"**Tool Call ID:** `{tool_call_id or 'n/a'}`\n\n"
-        f"**Args:**\n```json\n{args_json}\n```"
+
+    content = Group(
+        tool_info,
+        Text("\n"),  # Spacing
+        Markdown(f"**Arguments:**\n```json\n{args_json}\n```"),
     )
-    console.print(Panel(Markdown(content), title="Tool Call", border_style="yellow"))
+
+    console.print(
+        Panel(
+            content,
+            title=None,
+            border_style=COLORS["accent"],
+            padding=(1, 2),
+        )
+    )
 
 
 def print_query_stats(console: Console, tool_calls: int, model_calls: int) -> None:
@@ -104,14 +183,20 @@ def print_query_stats(console: Console, tool_calls: int, model_calls: int) -> No
         tool_calls: Number of tool calls in this query.
         model_calls: Number of model calls in this query.
     """
-    from rich.text import Text
+    # Create chip-style stats
+    stats_line = Text()
+    stats_line.append(" ", style="white")
+    stats_line.append("⚡", style=COLORS["accent"])
+    stats_line.append(f" {tool_calls}", style=COLORS["accent"])
+    stats_line.append(" tools", style=COLORS["neutral"])
 
-    stats_text = Text()
-    stats_text.append("Tool calls: ", style="dim")
-    stats_text.append(str(tool_calls), style="cyan")
-    stats_text.append(" | Model calls: ", style="dim")
-    stats_text.append(str(model_calls), style="cyan")
-    console.print(stats_text)
+    stats_line.append(" • ", style="dim")
+
+    stats_line.append("\N{brain}", style=COLORS["primary"])
+    stats_line.append(f" {model_calls}", style=COLORS["primary"])
+    stats_line.append(" models", style=COLORS["neutral"])
+
+    console.print(stats_line)
     console.print()
 
 
@@ -123,6 +208,30 @@ def print_error(console: Console, message: str, traceback_str: str | None = None
         message: Error message.
         traceback_str: Optional traceback string.
     """
-    console.print(f"\n[red]✗ {message}[/red]\n")
+    # Header
+    header = Text()
+    header.append("✗ ", style=COLORS["error"])
+    header.append("Error", style=f"bold {COLORS['error']}")
+
+    console.print()
+    console.print(header)
+    console.print(
+        Panel(
+            Text(message, style=COLORS["text"]),
+            border_style=COLORS["error"],
+            padding=(1, 2),
+        )
+    )
+
     if traceback_str:
-        console.print(f"[dim]{traceback_str}[/dim]")
+        console.print()
+        console.print(
+            Panel(
+                Text(traceback_str, style="dim"),
+                title="Traceback",
+                border_style="dim",
+                padding=(1, 2),
+            )
+        )
+
+    console.print()

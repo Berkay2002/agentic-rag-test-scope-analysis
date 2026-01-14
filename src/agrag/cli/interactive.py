@@ -129,7 +129,12 @@ class InteractiveChat:
     def _init_prompt_session(self) -> None:
         """Initialize prompt toolkit session."""
         self.history = InMemoryHistory()
-        self.completer = WordCompleter(CHAT_COMMANDS, ignore_case=True)
+        # Only show command completions when typing a slash
+        self.completer = WordCompleter(
+            CHAT_COMMANDS,
+            ignore_case=True,
+            pattern=r"^/.*",  # Only match when line starts with /
+        )
         self.style = Style.from_dict({"prompt": "#00aa00 bold"})
 
         # Create input/output with CPR (cursor position request) disabled
@@ -145,6 +150,7 @@ class InteractiveChat:
             history=self.history,
             auto_suggest=AutoSuggestFromHistory(),
             completer=self.completer,
+            complete_while_typing=True,
             style=self.style,
             input=pt_input,
             output=pt_output,
@@ -455,6 +461,7 @@ class InteractiveChat:
     def run(self) -> None:
         """Run the interactive chat loop."""
         self._print_welcome()
+        self._interrupt_count = 0
 
         try:
             while True:
@@ -465,6 +472,9 @@ class InteractiveChat:
 
                     if not user_input:
                         continue
+
+                    # Reset interrupt count on successful input
+                    self._interrupt_count = 0
 
                     # Handle commands
                     if user_input.startswith("/"):
@@ -477,8 +487,13 @@ class InteractiveChat:
                     self._process_query(user_input)
 
                 except KeyboardInterrupt:
-                    self.console.print("\n[yellow]Use /exit to quit[/yellow]")
-                    continue
+                    self._interrupt_count += 1
+                    if self._interrupt_count >= 2:
+                        self.console.print("\n[red]Interrupted by user[/red]")
+                        break
+                    else:
+                        self.console.print("\n[yellow]Press Ctrl+C again to exit, or type /exit[/yellow]")
+                        continue
 
                 except EOFError:
                     self.console.print("\n[green]Goodbye! 👋[/green]\n")
