@@ -12,9 +12,7 @@ from langchain_core.tools import tool
 from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
 from agrag.tools.base import (
     BaseToolWrapper,
-    format_search_results_header,
-    format_search_result_item,
-    format_search_results_footer,
+    format_search_output,
     build_metadata_with_chunk_id,
     extract_score_or_default,
 )
@@ -34,32 +32,11 @@ def _format_vector_output(output: VectorSearchOutput) -> str:
     Returns:
         Formatted string
     """
-    if not output.results:
-        return f"No results found for query: '{output.query}'"
-
-    # Build header
-    header = format_search_results_header(
-        query=output.query,
-        total_results=output.total_results,
-        retrieval_time_ms=output.retrieval_time_ms,
+    return format_search_output(
+        output=output,
         search_type="Vector Search",
+        score_label="Similarity",
     )
-
-    # Format each result
-    result_items = []
-    for i, result in enumerate(output.results, 1):
-        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
-        item = format_search_result_item(
-            index=i,
-            result_id=result.id,
-            score=result.score,
-            score_label="Similarity",
-            content=result.content,
-            entity_type=entity_type,
-        )
-        result_items.append(item)
-
-    return header + "\n".join(result_items)
 
 
 def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):

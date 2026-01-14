@@ -151,3 +151,58 @@ def extract_score_or_default(
         Float score value
     """
     return float(score_value) if score_value is not None else default
+
+
+def format_search_output(
+    output: Any,
+    search_type: str,
+    score_label: str,
+    additional_info: Optional[str] = None,
+    footer_note: Optional[str] = None,
+) -> str:
+    """Format search output for agent consumption.
+
+    Generic formatter that works with VectorSearchOutput, HybridSearchOutput,
+    or any output object with results, query, total_results, and retrieval_time_ms attributes.
+
+    Args:
+        output: Search output object (must have results, query, total_results, retrieval_time_ms)
+        search_type: Type of search (e.g., "Vector Search", "Hybrid Search")
+        score_label: Label for the score (e.g., "Similarity", "RRF Score")
+        additional_info: Optional additional information (e.g., fusion method)
+        footer_note: Optional footer note to append
+
+    Returns:
+        Formatted string
+    """
+    if not output.results:
+        return f"No results found for query: '{output.query}'"
+
+    # Build header
+    header = format_search_results_header(
+        query=output.query,
+        total_results=output.total_results,
+        retrieval_time_ms=output.retrieval_time_ms,
+        search_type=search_type,
+        additional_info=additional_info,
+    )
+
+    # Format each result
+    result_items = []
+    for i, result in enumerate(output.results, 1):
+        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
+        item = format_search_result_item(
+            index=i,
+            result_id=result.id,
+            score=result.score,
+            score_label=score_label,
+            content=result.content,
+            entity_type=entity_type,
+        )
+        result_items.append(item)
+
+    # Add footer if provided
+    footer = format_search_results_footer(footer_note)
+
+    return header + "\n".join(result_items) + footer
+

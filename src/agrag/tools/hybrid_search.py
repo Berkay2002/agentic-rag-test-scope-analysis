@@ -15,9 +15,7 @@ from langchain_core.tools import tool
 from agrag.tools.schemas import HybridSearchInput, HybridSearchOutput, SearchResult
 from agrag.tools.base import (
     BaseToolWrapper,
-    format_search_results_header,
-    format_search_result_item,
-    format_search_results_footer,
+    format_search_output,
     build_metadata_with_chunk_id,
     extract_score_or_default,
 )
@@ -36,38 +34,13 @@ def _format_hybrid_output(output: HybridSearchOutput) -> str:
     Returns:
         Formatted string
     """
-    if not output.results:
-        return f"No results found for query: '{output.query}'"
-
-    # Build header
-    header = format_search_results_header(
-        query=output.query,
-        total_results=output.total_results,
-        retrieval_time_ms=output.retrieval_time_ms,
+    return format_search_output(
+        output=output,
         search_type="Hybrid Search",
+        score_label="RRF Score",
         additional_info=output.fusion_method,
+        footer_note="Note: RRF combines pgvector similarity and pg_search BM25 ranking for optimal precision.",
     )
-
-    # Format each result
-    result_items = []
-    for i, result in enumerate(output.results, 1):
-        entity_type = result.metadata.get("entity_type", "Unknown") if result.metadata else None
-        item = format_search_result_item(
-            index=i,
-            result_id=result.id,
-            score=result.score,
-            score_label="RRF Score",
-            content=result.content,
-            entity_type=entity_type,
-        )
-        result_items.append(item)
-
-    # Add footer note
-    footer = format_search_results_footer(
-        "Note: RRF combines pgvector similarity and pg_search BM25 ranking for optimal precision."
-    )
-
-    return header + "\n".join(result_items) + footer
 
 
 def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
