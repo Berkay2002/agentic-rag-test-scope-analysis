@@ -40,6 +40,7 @@ class EmbeddingService:
             self.embeddings = GoogleGenerativeAIEmbeddings(
                 model=self.model_name,
                 google_api_key=self.api_key,
+                output_dimensionality=settings.embedding_dimensions,
             )
 
         mode = "mock" if self.use_mock else "google"

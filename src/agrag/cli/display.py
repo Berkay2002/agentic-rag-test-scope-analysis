@@ -323,13 +323,13 @@ def format_summary_table(
 
     if include_trials and summary.trial_statistics:
         trial_stats = summary.trial_statistics
-        pass_at_1 = trial_stats.get("pass_at_1")
         pass_at_k = trial_stats.get("pass_at_k")
+        pass_pow_k = trial_stats.get("pass_pow_k")
         stability = trial_stats.get("stability_score")
-        if pass_at_1 is not None:
-            stats_lines.append(f"Pass@1: {pass_at_1:.1%}")
         if pass_at_k is not None:
             stats_lines.append(f"Pass@k: {pass_at_k:.1%}")
+        if pass_pow_k is not None:
+            stats_lines.append(f"Pass^k: {pass_pow_k:.1%}")
         if stability is not None:
             stats_lines.append(f"Stability Score: {stability:.2f}")
 

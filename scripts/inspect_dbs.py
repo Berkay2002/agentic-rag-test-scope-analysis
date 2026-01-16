@@ -38,6 +38,37 @@ def inspect_postgres() -> None:
             return
 
         with client.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT format_type(a.atttypid, a.atttypmod) AS column_type
+                FROM pg_attribute a
+                JOIN pg_class c ON a.attrelid = c.oid
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                WHERE n.nspname = 'public'
+                  AND c.relname = 'document_chunks'
+                  AND a.attname = 'embedding'
+                """
+            )
+            type_row = cur.fetchone()
+            if type_row and type_row.get("column_type"):
+                print(f"Embedding column type: {type_row['column_type']}")
+
+            try:
+                cur.execute(
+                    """
+                    SELECT vector_dims(embedding) AS dims
+                    FROM document_chunks
+                    WHERE embedding IS NOT NULL
+                    LIMIT 5
+                    """
+                )
+                dims_rows = cur.fetchall() or []
+                if dims_rows:
+                    dims_list = [row["dims"] for row in dims_rows if row.get("dims") is not None]
+                    print(f"Sample embedding dims: {dims_list}")
+            except Exception as exc:
+                print(f"Embedding dimension check failed: {_safe_str(exc)}")
+
             cur.execute("SELECT COUNT(*) AS count FROM document_chunks")
             total = cur.fetchone()
             print(f"Total rows: {total['count'] if total else 'unknown'}")

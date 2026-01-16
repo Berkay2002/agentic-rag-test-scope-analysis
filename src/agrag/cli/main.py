@@ -4,7 +4,7 @@ import click
 import logging
 import sys
 import json
-from typing import Optional
+from typing import Optional, Dict, Any
 from pathlib import Path
 
 from langchain_core.runnables.config import RunnableConfig
@@ -330,8 +330,20 @@ def query(
 @click.option(
     "--dataset",
     type=click.Path(exists=True),
-    required=True,
+    required=False,
     help="Path to evaluation dataset (JSON)",
+)
+@click.option(
+    "--suite",
+    type=str,
+    default=None,
+    help="Evaluation suite name from the suites registry",
+)
+@click.option(
+    "--suite-file",
+    type=click.Path(exists=True),
+    default="data/eval_suites.json",
+    help="Path to evaluation suites registry (default: data/eval_suites.json)",
 )
 @click.option(
     "--output",
@@ -390,7 +402,9 @@ def query(
     help="Path to BM25 index file (default: data/bm25_index.pkl)",
 )
 def evaluate(
-    dataset: str,
+    dataset: Optional[str],
+    suite: Optional[str],
+    suite_file: str,
     output: str,
     k_values: str,
     strategy: str,
@@ -436,6 +450,7 @@ def evaluate(
       agrag evaluate --dataset data/eval.json --strategy hybrid --verbose
       agrag evaluate --dataset data/eval.json --strategy graph
       agrag evaluate --dataset data/eval.json --strategy agent  # Full agent eval
+      agrag evaluate --suite synthetic-capability
     """
     import json
     from agrag.evaluation import (
@@ -446,259 +461,383 @@ def evaluate(
     from agrag.evaluation.fixed_baselines import run_fixed_graphrag, run_fixed_rag
     from agrag.tools import VectorSearchTool, KeywordSearchTool, HybridSearchTool, GraphTraverseTool
     from agrag.storage import Neo4jClient, PostgresClient, BM25RetrieverManager
+    from datetime import datetime
 
-    effective_use_ragas = use_ragas or settings.ragas_enabled
-    effective_use_langsmith = use_langsmith or settings.langsmith_experiments_enabled
-    num_trials = max(1, num_trials)
+    def _load_suite_definition(suite_name: str, registry_path: str) -> Dict[str, Any]:
+        with open(registry_path, "r") as f:
+            registry = json.load(f)
 
-    click.echo(f"\nEvaluating dataset: {dataset}")
-    click.echo(f"Strategy: {strategy}")
+        suites = registry.get("suites", [])
+        if not suites:
+            raise click.UsageError(f"No suites found in registry: {registry_path}")
 
-    # Parse k values
-    k_list = [int(k.strip()) for k in k_values.split(",")]
-    click.echo(f"K values: {k_list}")
+        for suite_def in suites:
+            if suite_def.get("name") == suite_name:
+                return suite_def
 
-    try:
-        # Load dataset
-        with open(dataset, "r") as f:
-            data = json.load(f)
+        available = ", ".join(sorted(suite.get("name", "") for suite in suites))
+        raise click.UsageError(
+            f"Unknown suite '{suite_name}'. Available suites: {available or 'none'}"
+        )
 
-        # Handle both nested and flat formats
-        if isinstance(data, dict) and "queries" in data:
-            queries = data["queries"]
-        elif isinstance(data, list):
-            queries = data
-        else:
-            raise ValueError("Dataset must be a list or have a 'queries' key")
+    def _resolve_suite_dataset_path(dataset_path: str, registry_path: str) -> str:
+        candidate = Path(dataset_path)
+        if candidate.is_absolute():
+            return str(candidate)
+        registry_parent = Path(registry_path).parent
+        if candidate.parts and candidate.parts[0] == "data":
+            repo_root = registry_parent.parent
+            return str((repo_root / candidate).resolve())
+        return str((registry_parent / candidate).resolve())
 
-        click.echo(f"Loaded {len(queries)} queries\n")
+    def _run_single_evaluation(
+        dataset_path: str,
+        output_path: Optional[str],
+        k_values_value: str,
+        strategy_value: str,
+        use_ragas_value: bool,
+        use_langsmith_value: bool,
+        num_trials_value: int,
+        summary_only_value: bool,
+        experiment_name_value: Optional[str],
+        verbose_value: bool,
+        bm25_index_value: str,
+    ) -> None:
+        effective_use_ragas = use_ragas_value or settings.ragas_enabled
+        effective_use_langsmith = use_langsmith_value or settings.langsmith_experiments_enabled
+        num_trials_value = max(1, num_trials_value)
 
-        if effective_use_langsmith and strategy != "agent":
-            raise click.UsageError("--use-langsmith is only supported with --strategy agent")
+        click.echo(f"\nEvaluating dataset: {dataset_path}")
+        click.echo(f"Strategy: {strategy_value}")
 
-        if strategy != "agent" and (effective_use_ragas or num_trials > 1 or summary_only):
-            click.echo(
-                "Note: Ragas, trials, and summary-only options apply only to agent evaluation."
-            )
+        # Parse k values
+        k_list = [int(k.strip()) for k in k_values_value.split(",")]
+        click.echo(f"K values: {k_list}")
 
-        # Handle agent strategy separately
-        if strategy == "agent" and effective_use_langsmith:
-            from agrag.evaluation import LangSmithEvaluator
+        try:
+            # Load dataset
+            with open(dataset_path, "r") as f:
+                data = json.load(f)
 
-            dataset_name = Path(dataset).stem
-            evaluator = LangSmithEvaluator(
-                project_name=settings.langchain_project,
-                use_ragas=effective_use_ragas,
-                num_trials=num_trials,
-            )
+            # Handle both nested and flat formats
+            if isinstance(data, dict) and "queries" in data:
+                queries = data["queries"]
+            elif isinstance(data, list):
+                queries = data
+            else:
+                raise ValueError("Dataset must be a list or have a 'queries' key")
 
-            dataset_name = evaluator.upload_eval_dataset(
-                dataset_name=dataset_name,
-                queries=queries,
-                description=f"AgRAG evaluation dataset ({dataset})",
-                version=settings.langsmith_dataset_version,
-            )
+            click.echo(f"Loaded {len(queries)} queries\n")
 
-            agent_function = _build_langsmith_agent_function()
-            result = evaluator.run_experiment(
-                dataset_name=dataset_name,
-                agent_function=agent_function,
-                experiment_name=experiment_name,
-                metadata={"strategy": "agent", "ragas": effective_use_ragas},
-                max_concurrency=settings.langsmith_max_concurrency,
-            )
+            if effective_use_langsmith and strategy_value != "agent":
+                raise click.UsageError("--use-langsmith is only supported with --strategy agent")
 
-            if output:
-                with open(output, "w") as f:
-                    json.dump(result, f, indent=2)
-
-                click.echo(f"\n✓ Results saved to: {output}")
-
-            experiment_url = result.get("experiment_url")
-            if experiment_url:
-                click.echo(f"\nLangSmith Experiment: {experiment_url}")
-
-            return
-
-        if strategy == "agent":
-            _run_agent_evaluation(
-                queries=queries,
-                k_list=k_list,
-                output=output,
-                verbose=verbose,
-                use_ragas=effective_use_ragas,
-                num_trials=num_trials,
-                summary_only=summary_only,
-            )
-            return
-
-        # Initialize database clients
-        click.echo("Initializing retrieval tools...")
-        neo4j_client = Neo4jClient()
-        postgres_client = PostgresClient()
-        bm25_manager = BM25RetrieverManager(k=max(k_list) * 2)
-
-        # Load BM25 index from disk if available
-        if Path(bm25_index).exists():
-            click.echo(f"Loading BM25 index from {bm25_index}...")
-            bm25_manager.load(bm25_index)
-            click.echo(f"  Loaded {bm25_manager.get_document_count()} documents")
-        else:
-            click.echo(f"Warning: BM25 index not found at {bm25_index}")
-            click.echo("  Keyword search may return 0 results.")
-            click.echo("  Run 'agrag generate --ingest' to populate the index.")
-
-        # Initialize retrieval tools
-        tools = {}
-        if strategy in ["vector", "all"]:
-            tools["vector"] = VectorSearchTool(postgres_client=postgres_client)
-        if strategy in ["keyword", "all"]:
-            tools["keyword"] = KeywordSearchTool(postgres_client=postgres_client)
-        hybrid_tool = None
-        graph_tool = None
-
-        if strategy in ["hybrid", "rag", "graphrag", "all"]:
-            hybrid_tool = HybridSearchTool(postgres_client=postgres_client)
-        if strategy in ["graph", "graphrag", "all"]:
-            graph_tool = GraphTraverseTool(neo4j_client=neo4j_client)
-
-        if strategy in ["hybrid", "all"] and hybrid_tool:
-            tools["hybrid"] = hybrid_tool
-        if strategy in ["graph", "all"] and graph_tool:
-            tools["graph"] = graph_tool
-        if strategy in ["rag", "all"] and hybrid_tool:
-            tools["rag"] = hybrid_tool
-        if strategy in ["graphrag", "all"] and hybrid_tool and graph_tool:
-            tools["graphrag"] = {"hybrid": hybrid_tool, "graph": graph_tool}
-
-        click.echo(f"Initialized tools: {list(tools.keys())}\n")
-
-        # Run evaluation for each strategy
-        strategies_to_run = list(tools.keys())
-        all_strategy_results = {}
-
-        for strat_name in strategies_to_run:
-            tool = tools[strat_name]
-            click.echo(f"\n{'='*50}")
-            click.echo(f"Evaluating strategy: {strat_name.upper()}")
-            click.echo(f"{'='*50}\n")
-
-            all_results = []
-
-            for i, query_data in enumerate(queries, 1):
-                query = query_data["query"]
-                relevant = set(query_data["relevant_ids"])
-                difficulty = query_data.get("difficulty", "unknown")
-
-                if verbose:
-                    click.echo(f"[{i}/{len(queries)}] ({difficulty}) {query[:60]}...")
-
-                # Execute actual retrieval (pass query_data for graph traversal context)
-                if strat_name == "rag":
-                    retrieved = run_fixed_rag(query=query, hybrid_tool=tool, k=max(k_list))
-                elif strat_name == "graphrag":
-                    retrieved = run_fixed_graphrag(
-                        query=query,
-                        hybrid_tool=tool["hybrid"],
-                        graph_tool=tool["graph"],
-                        k=max(k_list),
-                    )
-                else:
-                    retrieved = _execute_retrieval(tool, strat_name, query, max(k_list), query_data)
-
-                metrics = evaluate_retrieval(retrieved, relevant, k_values=k_list)
-                all_results.append(
-                    {
-                        "query": query,
-                        "query_id": query_data.get("id", f"Q_{i}"),
-                        "difficulty": difficulty,
-                        "retrieved": retrieved,
-                        "relevant": list(relevant),
-                        "metrics": metrics,
-                    }
+            if strategy_value != "agent" and (
+                effective_use_ragas or num_trials_value > 1 or summary_only_value
+            ):
+                click.echo(
+                    "Note: Ragas, trials, and summary-only options apply only to agent evaluation."
                 )
 
-                # Log metrics if verbose
-                if verbose:
-                    click.echo(f"  Retrieved: {len(retrieved)} items")
-                    for metric_name, score in metrics.items():
-                        if "precision" in metric_name or "recall" in metric_name:
-                            click.echo(f"    {metric_name}: {score:.4f}")
+            # Handle agent strategy separately
+            if strategy_value == "agent" and effective_use_langsmith:
+                from agrag.evaluation import LangSmithEvaluator
 
-            # Calculate aggregate metrics
-            map_score = mean_average_precision(all_results)
-            mrr_score = mean_reciprocal_rank(all_results)
+                dataset_name = Path(dataset_path).stem
+                evaluator = LangSmithEvaluator(
+                    project_name=settings.langchain_project,
+                    use_ragas=effective_use_ragas,
+                    num_trials=num_trials_value,
+                )
 
-            # Calculate average P@k and R@k
-            avg_metrics = {}
-            for k in k_list:
-                p_scores = [r["metrics"][f"precision@{k}"] for r in all_results]
-                r_scores = [r["metrics"][f"recall@{k}"] for r in all_results]
-                avg_metrics[f"avg_precision@{k}"] = sum(p_scores) / len(p_scores)
-                avg_metrics[f"avg_recall@{k}"] = sum(r_scores) / len(r_scores)
+                dataset_name = evaluator.upload_eval_dataset(
+                    dataset_name=dataset_name,
+                    queries=queries,
+                    description=f"AgRAG evaluation dataset ({dataset_path})",
+                    version=settings.langsmith_dataset_version,
+                )
 
-            # Store results for this strategy
-            all_strategy_results[strat_name] = {
-                "map": map_score,
-                "mrr": mrr_score,
-                **avg_metrics,
-                "per_query_results": all_results,
+                agent_function = _build_langsmith_agent_function()
+                result = evaluator.run_experiment(
+                    dataset_name=dataset_name,
+                    agent_function=agent_function,
+                    experiment_name=experiment_name_value,
+                    metadata={"strategy": "agent", "ragas": effective_use_ragas},
+                    max_concurrency=settings.langsmith_max_concurrency,
+                )
+
+                if output_path:
+                    with open(output_path, "w") as f:
+                        json.dump(result, f, indent=2)
+
+                    click.echo(f"\n✓ Results saved to: {output_path}")
+
+                experiment_url = result.get("experiment_url")
+                if experiment_url:
+                    click.echo(f"\nLangSmith Experiment: {experiment_url}")
+
+                return
+
+            if strategy_value == "agent":
+                _run_agent_evaluation(
+                    queries=queries,
+                    k_list=k_list,
+                    output=output_path,
+                    verbose=verbose_value,
+                    use_ragas=effective_use_ragas,
+                    num_trials=num_trials_value,
+                    summary_only=summary_only_value,
+                    dataset_path=dataset_path,
+                )
+                return
+
+            # Initialize database clients
+            click.echo("Initializing retrieval tools...")
+            neo4j_client = Neo4jClient()
+            postgres_client = PostgresClient()
+            bm25_manager = BM25RetrieverManager(k=max(k_list) * 2)
+
+            # Load BM25 index from disk if available
+            if Path(bm25_index_value).exists():
+                click.echo(f"Loading BM25 index from {bm25_index_value}...")
+                bm25_manager.load(bm25_index_value)
+                click.echo(f"  Loaded {bm25_manager.get_document_count()} documents")
+            else:
+                click.echo(f"Warning: BM25 index not found at {bm25_index_value}")
+                click.echo("  Keyword search may return 0 results.")
+                click.echo("  Run 'agrag generate --ingest' to populate the index.")
+
+            # Initialize retrieval tools
+            tools = {}
+            if strategy_value in ["vector", "all"]:
+                tools["vector"] = VectorSearchTool(postgres_client=postgres_client)
+            if strategy_value in ["keyword", "all"]:
+                tools["keyword"] = KeywordSearchTool(postgres_client=postgres_client)
+            hybrid_tool = None
+            graph_tool = None
+
+            if strategy_value in ["hybrid", "rag", "graphrag", "all"]:
+                hybrid_tool = HybridSearchTool(postgres_client=postgres_client)
+            if strategy_value in ["graph", "graphrag", "all"]:
+                graph_tool = GraphTraverseTool(neo4j_client=neo4j_client)
+
+            if strategy_value in ["hybrid", "all"] and hybrid_tool:
+                tools["hybrid"] = hybrid_tool
+            if strategy_value in ["graph", "all"] and graph_tool:
+                tools["graph"] = graph_tool
+            if strategy_value in ["rag", "all"] and hybrid_tool:
+                tools["rag"] = hybrid_tool
+            if strategy_value in ["graphrag", "all"] and hybrid_tool and graph_tool:
+                tools["graphrag"] = {"hybrid": hybrid_tool, "graph": graph_tool}
+
+            click.echo(f"Initialized tools: {list(tools.keys())}\n")
+
+            # Run evaluation for each strategy
+            strategies_to_run = list(tools.keys())
+            all_strategy_results = {}
+
+            for strat_name in strategies_to_run:
+                tool = tools[strat_name]
+                click.echo(f"\n{'='*50}")
+                click.echo(f"Evaluating strategy: {strat_name.upper()}")
+                click.echo(f"{'='*50}\n")
+
+                all_results = []
+
+                for i, query_data in enumerate(queries, 1):
+                    query = query_data["query"]
+                    relevant = set(query_data["relevant_ids"])
+                    difficulty = query_data.get("difficulty", "unknown")
+
+                    if verbose_value:
+                        click.echo(f"[{i}/{len(queries)}] ({difficulty}) {query[:60]}...")
+
+                    # Execute actual retrieval (pass query_data for graph traversal context)
+                    if strat_name == "rag":
+                        retrieved = run_fixed_rag(query=query, hybrid_tool=tool, k=max(k_list))
+                    elif strat_name == "graphrag":
+                        retrieved = run_fixed_graphrag(
+                            query=query,
+                            hybrid_tool=tool["hybrid"],
+                            graph_tool=tool["graph"],
+                            k=max(k_list),
+                        )
+                    else:
+                        retrieved = _execute_retrieval(
+                            tool, strat_name, query, max(k_list), query_data
+                        )
+
+                    metrics = evaluate_retrieval(retrieved, relevant, k_values=k_list)
+                    all_results.append(
+                        {
+                            "query": query,
+                            "query_id": query_data.get("id", f"Q_{i}"),
+                            "difficulty": difficulty,
+                            "retrieved": retrieved,
+                            "relevant": list(relevant),
+                            "metrics": metrics,
+                        }
+                    )
+
+                    # Log metrics if verbose
+                    if verbose_value:
+                        click.echo(f"  Retrieved: {len(retrieved)} items")
+                        for metric_name, score in metrics.items():
+                            if "precision" in metric_name or "recall" in metric_name:
+                                click.echo(f"    {metric_name}: {score:.4f}")
+
+                # Calculate aggregate metrics
+                map_score = mean_average_precision(all_results)
+                mrr_score = mean_reciprocal_rank(all_results)
+
+                # Calculate average P@k and R@k
+                avg_metrics = {}
+                for k in k_list:
+                    p_scores = [r["metrics"][f"precision@{k}"] for r in all_results]
+                    r_scores = [r["metrics"][f"recall@{k}"] for r in all_results]
+                    avg_metrics[f"avg_precision@{k}"] = sum(p_scores) / len(p_scores)
+                    avg_metrics[f"avg_recall@{k}"] = sum(r_scores) / len(r_scores)
+
+                # Store results for this strategy
+                all_strategy_results[strat_name] = {
+                    "map": map_score,
+                    "mrr": mrr_score,
+                    **avg_metrics,
+                    "per_query_results": all_results,
+                }
+
+                # Display aggregate metrics
+                click.echo(f"\n--- {strat_name.upper()} Aggregate Metrics ---")
+                click.echo(f"MAP: {map_score:.4f}")
+                click.echo(f"MRR: {mrr_score:.4f}")
+                for k in k_list:
+                    click.echo(f"Avg P@{k}: {avg_metrics[f'avg_precision@{k}']:.4f}")
+                    click.echo(f"Avg R@{k}: {avg_metrics[f'avg_recall@{k}']:.4f}")
+
+            # Print comparison table if multiple strategies
+            if len(strategies_to_run) > 1:
+                click.echo(f"\n{'='*70}")
+                click.echo("STRATEGY COMPARISON")
+                click.echo(f"{'='*70}")
+
+                # Header
+                header = f"{'Strategy':<12} | {'MAP':>8} | {'MRR':>8}"
+                for k in k_list:
+                    header += f" | {'P@'+str(k):>8} | {'R@'+str(k):>8}"
+                click.echo(header)
+                click.echo("-" * len(header))
+
+                # Rows
+                for strat_name in strategies_to_run:
+                    results = all_strategy_results[strat_name]
+                    row = (
+                        f"{strat_name:<12} | {results['map']:>8.4f} "
+                        f"| {results['mrr']:>8.4f}"
+                    )
+                    for k in k_list:
+                        row += (
+                            f" | {results[f'avg_precision@{k}']:>8.4f} "
+                            f"| {results[f'avg_recall@{k}']:>8.4f}"
+                        )
+                    click.echo(row)
+
+                # Find best strategy
+                best_map = max(strategies_to_run, key=lambda s: all_strategy_results[s]["map"])
+                best_mrr = max(strategies_to_run, key=lambda s: all_strategy_results[s]["mrr"])
+
+                click.echo(
+                    f"\nBest for MAP: {best_map} "
+                    f"({all_strategy_results[best_map]['map']:.4f})"
+                )
+                click.echo(
+                    f"Best for MRR: {best_mrr} "
+                    f"({all_strategy_results[best_mrr]['mrr']:.4f})"
+                )
+
+            # Save results
+            output_data = {
+                "dataset": dataset_path,
+                "queries_count": len(queries),
+                "k_values": k_list,
+                "strategies_evaluated": strategies_to_run,
+                "results": all_strategy_results,
             }
 
-            # Display aggregate metrics
-            click.echo(f"\n--- {strat_name.upper()} Aggregate Metrics ---")
-            click.echo(f"MAP: {map_score:.4f}")
-            click.echo(f"MRR: {mrr_score:.4f}")
-            for k in k_list:
-                click.echo(f"Avg P@{k}: {avg_metrics[f'avg_precision@{k}']:.4f}")
-                click.echo(f"Avg R@{k}: {avg_metrics[f'avg_recall@{k}']:.4f}")
+            if output_path:
+                with open(output_path, "w") as f:
+                    json.dump(output_data, f, indent=2)
 
-        # Print comparison table if multiple strategies
-        if len(strategies_to_run) > 1:
-            click.echo(f"\n{'='*70}")
-            click.echo("STRATEGY COMPARISON")
-            click.echo(f"{'='*70}")
+                click.echo(f"\n✓ Results saved to: {output_path}")
 
-            # Header
-            header = f"{'Strategy':<12} | {'MAP':>8} | {'MRR':>8}"
-            for k in k_list:
-                header += f" | {'P@'+str(k):>8} | {'R@'+str(k):>8}"
-            click.echo(header)
-            click.echo("-" * len(header))
+        except Exception as e:
+            click.echo(f"\n✗ Evaluation failed: {e}", err=True)
+            logger.exception("Evaluation failed")
+            sys.exit(1)
 
-            # Rows
-            for strat_name in strategies_to_run:
-                results = all_strategy_results[strat_name]
-                row = f"{strat_name:<12} | {results['map']:>8.4f} | {results['mrr']:>8.4f}"
-                for k in k_list:
-                    row += f" | {results[f'avg_precision@{k}']:>8.4f} | {results[f'avg_recall@{k}']:>8.4f}"
-                click.echo(row)
+    if suite:
+        run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        suite_def = _load_suite_definition(suite, suite_file)
+        datasets = suite_def.get("datasets", [])
+        if not datasets:
+            raise click.UsageError(f"Suite '{suite}' has no datasets")
 
-            # Find best strategy
-            best_map = max(strategies_to_run, key=lambda s: all_strategy_results[s]["map"])
-            best_mrr = max(strategies_to_run, key=lambda s: all_strategy_results[s]["mrr"])
+        click.echo(f"\nRunning evaluation suite: {suite_def.get('name', suite)}")
+        if suite_def.get("type"):
+            click.echo(f"Type: {suite_def.get('type')}")
+        if suite_def.get("owner"):
+            click.echo(f"Owner: {suite_def.get('owner')}")
+        if suite_def.get("description"):
+            click.echo(f"Description: {suite_def.get('description')}")
 
-            click.echo(f"\nBest for MAP: {best_map} ({all_strategy_results[best_map]['map']:.4f})")
-            click.echo(f"Best for MRR: {best_mrr} ({all_strategy_results[best_mrr]['mrr']:.4f})")
+        for entry in datasets:
+            dataset_path = entry.get("path")
+            if not dataset_path:
+                raise click.UsageError(f"Suite '{suite}' entry missing 'path'")
 
-        # Save results
-        output_data = {
-            "dataset": dataset,
-            "queries_count": len(queries),
-            "k_values": k_list,
-            "strategies_evaluated": strategies_to_run,
-            "results": all_strategy_results,
-        }
+            resolved_path = _resolve_suite_dataset_path(dataset_path, suite_file)
+            if not Path(resolved_path).exists():
+                raise click.UsageError(f"Dataset not found: {resolved_path}")
 
-        with open(output, "w") as f:
-            json.dump(output_data, f, indent=2)
+            output_path = entry.get("output", output)
+            if output_path:
+                output_candidate = Path(output_path)
+                output_path = str(
+                    output_candidate.with_name(
+                        f"{output_candidate.stem}.{run_id}{output_candidate.suffix}"
+                    )
+                )
 
-        click.echo(f"\n✓ Results saved to: {output}")
+            _run_single_evaluation(
+                dataset_path=resolved_path,
+                output_path=output_path,
+                k_values_value=entry.get("k_values", k_values),
+                strategy_value=entry.get("strategy", strategy),
+                use_ragas_value=entry.get("use_ragas", use_ragas),
+                use_langsmith_value=entry.get("use_langsmith", use_langsmith),
+                num_trials_value=entry.get("num_trials", num_trials),
+                summary_only_value=entry.get("summary_only", summary_only),
+                experiment_name_value=entry.get("experiment_name", experiment_name),
+                verbose_value=entry.get("verbose", verbose),
+                bm25_index_value=entry.get("bm25_index", bm25_index),
+            )
+        return
 
-    except Exception as e:
-        click.echo(f"\n✗ Evaluation failed: {e}", err=True)
-        logger.exception("Evaluation failed")
-        sys.exit(1)
+    if not dataset:
+        raise click.UsageError("Provide --dataset or --suite")
+
+    _run_single_evaluation(
+        dataset_path=dataset,
+        output_path=output,
+        k_values_value=k_values,
+        strategy_value=strategy,
+        use_ragas_value=use_ragas,
+        use_langsmith_value=use_langsmith,
+        num_trials_value=num_trials,
+        summary_only_value=summary_only,
+        experiment_name_value=experiment_name,
+        verbose_value=verbose,
+        bm25_index_value=bm25_index,
+    )
 
 
 def _build_langsmith_agent_function():
@@ -839,13 +978,17 @@ def _execute_retrieval(
     try:
         if strategy_name == "vector":
             # Vector search returns formatted string, need to parse
-            result_str = tool._run(query=query, k=k, node_type="TestCase")
+            result_str = tool.invoke({"query": query, "k": k, "node_type": "TestCase"}, config={})
             return _parse_result_ids(result_str)
         elif strategy_name == "keyword":
-            result_str = tool._run(query=query, k=k)
+            result_str = tool.invoke(
+                {"query": query, "k": k, "entity_type": "TestCase"}, config={}
+            )
             return _parse_result_ids(result_str)
         elif strategy_name == "hybrid":
-            result_str = tool._run(query=query, k=k)
+            result_str = tool.invoke(
+                {"query": query, "k": k, "entity_type": "TestCase"}, config={}
+            )
             return _parse_result_ids(result_str)
         elif strategy_name == "graph":
             # Graph traversal requires extracting entity ID from query
@@ -945,12 +1088,15 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
         direction = "both"
 
     try:
-        result_str = tool._run(
-            start_node_id=start_node_id,
-            start_node_label=start_node_label,
-            relationship_types=relationship_types,
-            depth=2,
-            direction=direction,
+        result_str = tool.invoke(
+            {
+                "start_node_id": start_node_id,
+                "start_node_label": start_node_label,
+                "relationship_types": relationship_types,
+                "depth": 2,
+                "direction": direction,
+            },
+            config={},
         )
 
         # Parse the graph traversal output
@@ -1063,6 +1209,7 @@ def _run_agent_evaluation(
     use_ragas: bool,
     num_trials: int,
     summary_only: bool,
+    dataset_path: str,
 ):
     """
     Run full agent evaluation on the dataset.
@@ -1144,8 +1291,10 @@ def _run_agent_evaluation(
 
         if num_trials > 1 and summary.trial_statistics:
             click.echo("\n--- Trial Statistics ---")
-            click.echo(f"Pass@1: {summary.trial_statistics.get('pass_at_1', 0):.1%}")
-            click.echo(f"Pass@k: {summary.trial_statistics.get('pass_at_k', 0):.1%}")
+            pass_at_k = summary.trial_statistics.get("pass_at_k")
+            pass_pow_k = summary.trial_statistics.get("pass_pow_k")
+            click.echo(f"Pass@k: {pass_at_k or 0:.1%}")
+            click.echo(f"Pass^k: {pass_pow_k or 0:.1%}")
             click.echo(
                 f"Stability score: {summary.trial_statistics.get('stability_score', 0):.2f}"
             )
@@ -1181,7 +1330,7 @@ def _run_agent_evaluation(
 
     output_data = {
         "strategy": "agent",
-        "dataset": output.replace("_results.json", ".json"),
+        "dataset": dataset_path,
         "queries_count": len(queries),
         "k_values": k_list,
         "results": {

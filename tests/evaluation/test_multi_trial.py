@@ -85,8 +85,8 @@ def test_trial_statistics_aggregation():
 
     assert stats["num_trials"] == 3
     assert stats["success_rate"] == 0.6667
-    assert stats["pass_at_1"] == 1.0
-    assert stats["pass_at_k"] == 0.0
+    assert stats["pass_at_k"] == 1.0
+    assert stats["pass_pow_k"] == 0.0
     assert "mean_metrics" in stats
     assert "std_metrics" in stats
     assert 0.0 <= stats["stability_score"] <= 1.0

@@ -75,6 +75,7 @@ poetry run agrag init
 poetry run agrag generate --requirements 50 --testcases 200
 poetry run agrag ingest data/synthetic_dataset.json
 poetry run agrag evaluate --dataset data/eval_queries.json --strategy all
+poetry run agrag evaluate --suite synthetic-capability
 poetry run agrag info
 poetry run agrag load docs /path/to/docs --use-chunker
 ```

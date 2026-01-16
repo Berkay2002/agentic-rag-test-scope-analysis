@@ -290,6 +290,9 @@ poetry run agrag evaluate --dataset data/eval_queries.json --output results.json
 # Evaluate specific strategy
 poetry run agrag evaluate --dataset data/eval_queries.json --strategy vector
 
+# Evaluate with synthetic capability suite
+poetry run agrag evaluate --suite synthetic-capability
+
 # Evaluate the full agent with dynamic tool selection (RQ2)
 poetry run agrag evaluate --dataset data/eval_queries.json --strategy agent
 
@@ -336,6 +339,9 @@ print(result["final_answer"])
 The system uses a custom ontology for software engineering entities:
 
 ### Entity Types
+- **ChangeRequest**: Change requests linked to touched files
+- **File**: Source files in the codebase
+- **Component**: Higher-level components/modules
 - **Requirement**: System requirements with priorities
 - **TestCase**: Test cases (unit, integration, protocol, etc.)
 - **Function**: Code functions with signatures
@@ -343,12 +349,15 @@ The system uses a custom ontology for software engineering entities:
 - **Module**: Code modules/packages
 
 ### Relationship Types
+- **TOUCHES**: ChangeRequest → File
+- **PART_OF**: File → Component
 - **VERIFIES**: TestCase → Requirement
-- **COVERS**: TestCase → Function/Class
+- **COVERS**: TestCase → Function
 - **CALLS**: Function → Function
-- **DEFINED_IN**: Function/Class → Module
+- **DEFINED_IN**: Function → File
 - **INHERITS_FROM**: Class → Class
-- **DEPENDS_ON**: Requirement → Requirement
+- **BELONGS_TO**: Class/Function → Module
+- **DEPENDS_ON**: Module → Module
 
 ## Retrieval Tools
 

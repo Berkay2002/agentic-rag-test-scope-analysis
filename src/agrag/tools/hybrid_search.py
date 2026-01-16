@@ -52,7 +52,10 @@ def _merge_hybrid_results(
     # Group results by ID to handle duplicates
     result_groups = {}
     for result in all_results:
-        result_id = result.get("id")
+        metadata = result.get("metadata") or {}
+        result_id = metadata.get("entity_id") or result.get("id") or result.get("chunk_id")
+        if result_id is None:
+            continue
         if result_id not in result_groups:
             result_groups[result_id] = []
         result_groups[result_id].append(result)

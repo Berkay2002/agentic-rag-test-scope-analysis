@@ -445,8 +445,8 @@ def aggregate_trial_statistics(
         {
             'num_trials': int,
             'success_rate': float,
-            'pass_at_1': float,  # At least 1 trial passed
-            'pass_at_k': float,  # All trials passed
+            'pass_at_k': float,  # At least 1 trial passed
+            'pass_pow_k': float,  # All trials passed
             'mean_metrics': {...},
             'std_metrics': {...},
             'min_metrics': {...},
@@ -1047,8 +1047,8 @@ class TestMultiTrialEvaluation:
         
         assert 'num_trials' in stats
         assert 'success_rate' in stats
-        assert 'pass_at_1' in stats
         assert 'pass_at_k' in stats
+        assert 'pass_pow_k' in stats
         assert 'mean_metrics' in stats
         assert 'std_metrics' in stats
         assert 'stability_score' in stats
@@ -1416,8 +1416,8 @@ LangSmith Experiment: https://smith.langchain.com/o/.../experiments/...
     "trial_statistics": {
       "num_trials": 5,
       "success_rate": 0.985,
-      "pass_at_1": 0.980,
-      "pass_at_k": 0.940,
+    "pass_at_k": 0.980,
+    "pass_pow_k": 0.940,
       "mean_metrics": {...},
       "std_metrics": {...},
       "stability_score": 0.89

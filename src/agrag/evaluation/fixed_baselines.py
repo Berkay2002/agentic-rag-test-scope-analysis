@@ -48,7 +48,8 @@ def _infer_entity_type_from_id(entity_id: str) -> str | None:
 def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
     from agrag.cli.main import _parse_result_ids
 
-    entity_type = _infer_entity_type_from_id(query)
+    inferred_type = _infer_entity_type_from_id(query)
+    entity_type = inferred_type or NodeLabel.TEST_CASE.value
     kwargs = {"query": query, "k": k}
     if entity_type:
         kwargs["entity_type"] = entity_type
@@ -56,7 +57,7 @@ def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
     result_str = _invoke_tool(hybrid_tool, **kwargs)
     ids = _parse_result_ids(result_str)
 
-    if entity_type and query not in ids:
+    if inferred_type and query not in ids:
         ids.insert(0, query)
 
     return ids

@@ -94,8 +94,8 @@ poetry run agrag chat --thread-id dev-session
    - Storage writers: Idempotent upserts with batch processing
 
 5. **Knowledge Graph Ontology** (`src/agrag/kg/`)
-   - 5 entity types: Requirement, TestCase, Function, Class, Module
-   - 6 relationship types: VERIFIES, COVERS, CALLS, DEFINED_IN, INHERITS_FROM, DEPENDS_ON
+   - Entity types: ChangeRequest, File, Component, Requirement, TestCase, Function, Class, Module
+   - Relationship types: TOUCHES, PART_OF, VERIFIES, COVERS, CALLS, DEFINED_IN, INHERITS_FROM, BELONGS_TO, DEPENDS_ON
    - Rich metadata support (priorities, test types, signatures)
 
 6. **Evaluation Framework** (`src/agrag/evaluation/`)

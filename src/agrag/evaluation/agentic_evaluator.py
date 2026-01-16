@@ -414,8 +414,8 @@ class AgenticEvaluator:
             return {
                 "num_trials": 0,
                 "success_rate": 0.0,
-                "pass_at_1": 0.0,
                 "pass_at_k": 0.0,
+                "pass_pow_k": 0.0,
                 "mean_metrics": {},
                 "std_metrics": {},
                 "min_metrics": {},
@@ -426,8 +426,8 @@ class AgenticEvaluator:
         success_flags = [result.error is None for result in trial_results]
         num_trials = len(trial_results)
         success_rate = sum(success_flags) / max(1, num_trials)
-        pass_at_1 = 1.0 if any(success_flags) else 0.0
-        pass_at_k = 1.0 if all(success_flags) else 0.0
+        pass_at_k = 1.0 if any(success_flags) else 0.0
+        pass_pow_k = 1.0 if all(success_flags) else 0.0
 
         metric_values: Dict[str, List[float]] = {}
         for result in trial_results:
@@ -454,8 +454,8 @@ class AgenticEvaluator:
         return {
             "num_trials": num_trials,
             "success_rate": round(success_rate, 4),
-            "pass_at_1": round(pass_at_1, 4),
             "pass_at_k": round(pass_at_k, 4),
+            "pass_pow_k": round(pass_pow_k, 4),
             "mean_metrics": mean_metrics,
             "std_metrics": std_metrics,
             "min_metrics": min_metrics,
@@ -603,13 +603,15 @@ class AgenticEvaluator:
                         / max(1, len(all_results)),
                         4,
                     ),
-                    "pass_at_1": round(
-                        sum(1 for stats in per_query_trial_stats if stats.get("pass_at_1") == 1.0)
+                    "pass_at_k": round(
+                        sum(1 for stats in per_query_trial_stats if stats.get("pass_at_k") == 1.0)
                         / max(1, len(per_query_trial_stats)),
                         4,
                     ),
-                    "pass_at_k": round(
-                        sum(1 for stats in per_query_trial_stats if stats.get("pass_at_k") == 1.0)
+                    "pass_pow_k": round(
+                        sum(
+                            1 for stats in per_query_trial_stats if stats.get("pass_pow_k") == 1.0
+                        )
                         / max(1, len(per_query_trial_stats)),
                         4,
                     ),

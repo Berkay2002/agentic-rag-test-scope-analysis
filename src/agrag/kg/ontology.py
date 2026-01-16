@@ -67,7 +67,6 @@ class RelationshipType(str, Enum):
     INHERITS_FROM = "INHERITS_FROM"  # Class -> Class
     BELONGS_TO = "BELONGS_TO"  # Class/Function -> Module
     DEPENDS_ON = "DEPENDS_ON"  # Module -> Module
-    TESTS = "TESTS"  # TestCase -> TestCase (test dependencies)
 
 
 # Entity Models

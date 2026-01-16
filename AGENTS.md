@@ -123,6 +123,10 @@ poetry run ruff check --fix src/ tests/     # Fix auto-fixable
 - `PART_OF`: File → Component
 - `COVERS`: TestCase → Function
 - `VERIFIES`: TestCase → Requirement
+- `CALLS`: Function → Function
+- `INHERITS_FROM`: Class → Class
+- `BELONGS_TO`: Class/Function → Module
+- `DEPENDS_ON`: Module → Module
 
 **Adding entities:** Update enums → Add Neo4j constraint → Add index → Update PostgreSQL → Update generators → Update tools
 
