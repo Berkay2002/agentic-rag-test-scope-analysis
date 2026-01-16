@@ -22,7 +22,7 @@ Chat commands:
 - `/save` - Save conversation to file
 - `/export [filename] [--verbose]` - Export transcript (verbose includes tool args/results)
 - `/verbose` - Toggle tool call arguments in output
-- `/thinking [preset|tokens]` - Set thinking budget
+- `/thinking [level|preset|tokens]` - Set thinking level or legacy budget
 - `/exit` or `/quit` - Exit chat
 
 Notes:

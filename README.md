@@ -36,7 +36,7 @@ This system implements a comprehensive agentic RAG architecture that aims to add
 - **HITL Workflows**: PostgresSaver checkpointing for human intervention and tool approval
 - **Middleware Support**: Built-in ModelCallLimit, ToolCallLimit, HumanInTheLoop, and PII detection middleware
 - **LangSmith Integration**: Full observability and debugging
-- **Gemini Thinking Configuration**: Adjustable reasoning depth (low/medium/high/dynamic) via CLI commands
+- **Gemini Thinking Configuration**: Adjustable reasoning depth via `thinking_level` (low/medium/high/minimal) or legacy budgets
 - **Headless Mode**: Scriptable CLI with text/json/stream-json output for automation
 - **Conversation Export**: Export chat transcripts with optional tool call details
 
@@ -195,7 +195,7 @@ The interactive chat mode provides a conversational interface with:
 - `/save` - Save conversation to file
 - `/export` - Export conversation transcript (use `--verbose` for tool args/results)
 - `/verbose` - Toggle tool call arguments in output
-- `/thinking [preset]` - Adjust Gemini thinking budget (`low`, `medium`, `high`, `dynamic`, or integer tokens)
+- `/thinking [level|preset|tokens]` - Set Gemini thinking level (`low`, `medium`, `high`, `minimal`) or legacy budget
 - `/exit` or `/quit` - Exit chat
 - **Ctrl+C (press twice)** - Exit immediately
 
@@ -482,7 +482,7 @@ src/agrag/
 │   ├── interactive.py # Interactive chat interface
 │   ├── display.py    # Output formatting utilities
 │   ├── hitl.py       # Human-in-the-loop utilities
-│   ├── thinking.py   # Gemini thinking budget configuration
+│   ├── thinking.py   # Gemini thinking configuration
 │   ├── commands.py   # Command handler helpers
 │   ├── headless.py   # Headless (non-interactive) execution
 │   └── README.md     # CLI usage guide
