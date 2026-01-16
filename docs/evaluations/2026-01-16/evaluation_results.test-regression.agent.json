@@ -1,0 +1,165 @@
+{
+  "strategy": "agent",
+  "dataset": "data/eval_queries_test.json",
+  "queries_count": 2,
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "results": {
+    "agent": {
+      "map": 1.0,
+      "mrr": 1.0,
+      "avg_precision_at_k": {
+        "1": 1.0,
+        "3": 0.3333,
+        "5": 0.2,
+        "10": 0.1
+      },
+      "avg_recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "avg_f1_at_k": {
+        "1": 1.0,
+        "3": 0.5,
+        "5": 0.3333,
+        "10": 0.1818
+      },
+      "tool_usage": {
+        "total_tool_calls": 5,
+        "avg_tools_per_query": 2.5,
+        "tool_frequency": {
+          "hybrid_search": 2,
+          "graph_traverse": 2
+        },
+        "tool_combinations": {
+          "graph_traverse+hybrid_search": 2
+        }
+      },
+      "execution_stats": {
+        "total_queries": 2,
+        "successful_queries": 2,
+        "success_rate": 1.0,
+        "avg_execution_time_ms": 9558.1
+      },
+      "trial_statistics": null,
+      "avg_ragas_metrics": null,
+      "per_query_results": [
+        {
+          "query_id": "Q_TEST_001",
+          "query": "What test validates protocol failure with 5G NR?",
+          "query_type": "test_coverage",
+          "difficulty": "easy",
+          "retrieved_ids": [
+            "TC_PROTOCOL_003",
+            "TC_PROTOCOL_154",
+            "TC_AUTHENTICATION_123",
+            "REQ_AUTHENTICATION_037",
+            "FUNC_calculate_latency",
+            "FUNC_verify_credentials",
+            "TC_SECURITY_077",
+            "TC_SECURITY_020",
+            "REQ_HANDOVER_025",
+            "REQ_AUTHENTICATION_040",
+            "REQ_HANDOVER_035",
+            "REQ_AUTHENTICATION_038",
+            "REQ_MEASUREMENT_015",
+            "FUNC_aggregate_data",
+            "FUNC_collect_measurements"
+          ],
+          "relevant_ids": [
+            "TC_PROTOCOL_003"
+          ],
+          "metrics": {
+            "precision@1": 1.0,
+            "recall@1": 1.0,
+            "f1@1": 1.0,
+            "precision@3": 0.3333333333333333,
+            "recall@3": 1.0,
+            "f1@3": 0.5,
+            "precision@5": 0.2,
+            "recall@5": 1.0,
+            "f1@5": 0.33333333333333337,
+            "precision@10": 0.1,
+            "recall@10": 1.0,
+            "f1@10": 0.18181818181818182,
+            "average_precision": 1.0,
+            "reciprocal_rank": 1.0
+          },
+          "tools_used": [
+            "hybrid_search",
+            "graph_traverse"
+          ],
+          "tool_call_count": 3,
+          "model_call_count": 4,
+          "execution_time_ms": 11514.38,
+          "found_any_relevant": true,
+          "first_relevant_rank": 1,
+          "final_answer": "**Answer Summary:**\nThe test cases **TC_PROTOCOL_003** and **TC_PROTOCOL_154** are the primary tests designed to validate protocol behavior during failure scenarios specifically using the 5G NR protocol. Additionally, **TC_AUTHENTICATION_123** validates authentication-specific protocol failures in 5G NR.\n\n**Ranked Results:**\n- **TC_PROTOCOL_003** (TestCase): Test Protocol Failure - Verify protocol behavior during failure scenario using 5G NR protocol. (score: 0.0361) [explicit]\n- **TC_PROTOCOL_154** (TestCase): Test Protocol Failure - Verify protocol behavior during failure scenario using 5G NR protocol. (score: 0.0355) [explicit]\n- **TC_AUTHENTICATION_123** (TestCase): Test Authentication Failure - Verify authentication behavior during failure scenario using 5G NR protocol. (score: 0.0349) [explicit]\n\n**Evidence:**\n- \"TC_PROTOCOL_003 Test Protocol Failure Verify protocol behavior during failure scenario using 5G NR protocol...\" (source: TC_PROTOCOL_003)\n- \"TC_AUTHENTICATION_123 Test Authentication Failure Verify authentication behavior during failure scenario using 5G NR protocol...\" (source: TC_AUTHENTICATION_123)\n\n**Graph Paths:**\n- TC_PROTOCOL_003 -[COVERS]-> FUNC_calculate_latency\n- TC_AUTHENTICATION_123 -[VERIFIES]-> REQ_AUTHENTICATION_037\n- TC_AUTHENTICATION_123 -[COVERS]-> FUNC_verify_credentials\n\n**Uncertainty:**\n- While the snippets explicitly mention \"5G NR protocol\" and \"failure scenario,\" the specific type of protocol failure (e.g., timeout, malformed packet, signaling error) is not detailed in the summary text.\n- TC_PROTOCOL_154 shares an identical description with TC_PROTOCOL_003 in the search results; their specific differentiation (e.g., which layer of the protocol stack) is inferred but not explicitly stated.",
+          "error": null,
+          "ragas_metrics": null,
+          "trial_number": 1,
+          "contexts_used": []
+        },
+        {
+          "query_id": "Q_TEST_002",
+          "query": "Show the test case for mobility failure on X2.",
+          "query_type": "test_coverage",
+          "difficulty": "easy",
+          "retrieved_ids": [
+            "TC_MOBILITY_001",
+            "TC_DATA_022",
+            "TC_PROTOCOL_121",
+            "FUNC_establish_bearer",
+            "FUNC_log_event",
+            "TC_SECURITY_119",
+            "TC_SECURITY_138",
+            "TC_SECURITY_173",
+            "TC_MOBILITY_067",
+            "REQ_MEASUREMENT_049",
+            "REQ_MEASUREMENT_018",
+            "REQ_AUTHENTICATION_037"
+          ],
+          "relevant_ids": [
+            "TC_MOBILITY_001"
+          ],
+          "metrics": {
+            "precision@1": 1.0,
+            "recall@1": 1.0,
+            "f1@1": 1.0,
+            "precision@3": 0.3333333333333333,
+            "recall@3": 1.0,
+            "f1@3": 0.5,
+            "precision@5": 0.2,
+            "recall@5": 1.0,
+            "f1@5": 0.33333333333333337,
+            "precision@10": 0.1,
+            "recall@10": 1.0,
+            "f1@10": 0.18181818181818182,
+            "average_precision": 1.0,
+            "reciprocal_rank": 1.0
+          },
+          "tools_used": [
+            "hybrid_search",
+            "graph_traverse"
+          ],
+          "tool_call_count": 2,
+          "model_call_count": 3,
+          "execution_time_ms": 7601.83,
+          "found_any_relevant": true,
+          "first_relevant_rank": 1,
+          "final_answer": "**Answer Summary:**\nThe primary test case for mobility failure over the X2 interface is **TC_MOBILITY_001**, which is designed to verify system behavior during failure scenarios within the X2 protocol.\n\n**Ranked Results:**\n- **TC_MOBILITY_001** (TestCase): Test Mobility Failure - Verifies mobility behavior during failure scenario using X2 protocol. (score: 0.0361) [explicit]\n- **TC_DATA_022** (TestCase): Test Data Failure - Verifies data plane behavior during X2 failure scenarios. (score: 0.0314) [inferred]\n- **TC_PROTOCOL_121** (TestCase): Test Protocol Failure - Verifies protocol-level handling of X2 failures. (score: 0.0310) [inferred]\n\n**Evidence:**\n- \"TC_MOBILITY_001 Test Mobility Failure Verify mobility behavior during failure scenario using X2 protocol...\" (source: TC_MOBILITY_001)\n- \"TC_DATA_022 Test Data Failure Verify data behavior during failure scenario using X2 protocol...\" (source: TC_DATA_022)\n\n**Graph Paths:**\n- TC_MOBILITY_001 -[COVERS]-> FUNC_establish_bearer\n- TC_MOBILITY_001 -[COVERS]-> FUNC_log_event\n\n**Uncertainty:**\n- The specific type of failure (e.g., Handover Preparation Failure vs. Radio Link Failure during X2 execution) is not detailed in the brief snippet.\n- While TC_MOBILITY_001 is the most direct match, TC_DATA_022 and TC_PROTOCOL_121 are likely relevant side-cases for data/signaling impacts of the same failure.",
+          "error": null,
+          "ragas_metrics": null,
+          "trial_number": 1,
+          "contexts_used": []
+        }
+      ]
+    }
+  }
+}

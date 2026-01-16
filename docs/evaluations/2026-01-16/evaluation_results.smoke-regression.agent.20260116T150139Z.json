@@ -1,0 +1,55 @@
+{
+  "strategy": "agent",
+  "dataset": "/Volumes/extSSD/dev/projects/agentic-rag-test-scope-analysis/data/eval_queries_smoke.json",
+  "queries_count": 2,
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "results": {
+    "agent": {
+      "map": 1.0,
+      "mrr": 1.0,
+      "avg_precision_at_k": {
+        "1": 1.0,
+        "3": 0.3333,
+        "5": 0.2,
+        "10": 0.1
+      },
+      "avg_recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "avg_f1_at_k": {
+        "1": 1.0,
+        "3": 0.5,
+        "5": 0.3333,
+        "10": 0.1818
+      },
+      "tool_usage": {
+        "total_tool_calls": 6,
+        "avg_tools_per_query": 3.0,
+        "tool_frequency": {
+          "hybrid_search": 2,
+          "graph_traverse": 2
+        },
+        "tool_combinations": {
+          "graph_traverse+hybrid_search": 2
+        }
+      },
+      "execution_stats": {
+        "total_queries": 2,
+        "successful_queries": 2,
+        "success_rate": 1.0,
+        "avg_execution_time_ms": 8961.29
+      },
+      "trial_statistics": null,
+      "avg_ragas_metrics": null,
+      "per_query_results": []
+    }
+  }
+}

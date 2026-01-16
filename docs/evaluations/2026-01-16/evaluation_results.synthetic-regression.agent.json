@@ -1,0 +1,224 @@
+{
+  "strategy": "agent",
+  "dataset": "data/eval_queries_synthetic.json",
+  "queries_count": 3,
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "results": {
+    "agent": {
+      "map": 0.6667,
+      "mrr": 0.6667,
+      "avg_precision_at_k": {
+        "1": 0.6667,
+        "3": 0.2222,
+        "5": 0.1333,
+        "10": 0.0667
+      },
+      "avg_recall_at_k": {
+        "1": 0.6667,
+        "3": 0.6667,
+        "5": 0.6667,
+        "10": 0.6667
+      },
+      "avg_f1_at_k": {
+        "1": 0.6667,
+        "3": 0.3333,
+        "5": 0.2222,
+        "10": 0.1212
+      },
+      "tool_usage": {
+        "total_tool_calls": 10,
+        "avg_tools_per_query": 3.33,
+        "tool_frequency": {
+          "hybrid_search": 3,
+          "graph_traverse": 3,
+          "vector_search": 1
+        },
+        "tool_combinations": {
+          "graph_traverse+hybrid_search": 2,
+          "graph_traverse+hybrid_search+vector_search": 1
+        }
+      },
+      "execution_stats": {
+        "total_queries": 3,
+        "successful_queries": 3,
+        "success_rate": 1.0,
+        "avg_execution_time_ms": 10466.05
+      },
+      "trial_statistics": null,
+      "avg_ragas_metrics": null,
+      "per_query_results": [
+        {
+          "query_id": "Q_SYN_001",
+          "query": "Which test covers mobility failure using the X2 protocol?",
+          "query_type": "test_coverage",
+          "difficulty": "easy",
+          "retrieved_ids": [
+            "TC_MOBILITY_001",
+            "TC_PROTOCOL_121",
+            "FUNC_establish_bearer",
+            "FUNC_log_event",
+            "TC_SECURITY_119",
+            "TC_SECURITY_173",
+            "TC_SECURITY_138",
+            "TC_SECURITY_157",
+            "TC_MOBILITY_067",
+            "REQ_MEASUREMENT_018",
+            "REQ_MEASUREMENT_049",
+            "REQ_AUTHENTICATION_037"
+          ],
+          "relevant_ids": [
+            "TC_MOBILITY_001"
+          ],
+          "metrics": {
+            "precision@1": 1.0,
+            "recall@1": 1.0,
+            "f1@1": 1.0,
+            "precision@3": 0.3333333333333333,
+            "recall@3": 1.0,
+            "f1@3": 0.5,
+            "precision@5": 0.2,
+            "recall@5": 1.0,
+            "f1@5": 0.33333333333333337,
+            "precision@10": 0.1,
+            "recall@10": 1.0,
+            "f1@10": 0.18181818181818182,
+            "average_precision": 1.0,
+            "reciprocal_rank": 1.0
+          },
+          "tools_used": [
+            "hybrid_search",
+            "graph_traverse"
+          ],
+          "tool_call_count": 3,
+          "model_call_count": 4,
+          "execution_time_ms": 11429.76,
+          "found_any_relevant": true,
+          "first_relevant_rank": 1,
+          "final_answer": "**Answer Summary:**\nThe test case **TC_MOBILITY_001** specifically covers mobility behavior during failure scenarios using the X2 protocol. It is supported by functional coverage of bearer establishment and event logging.\n\n**Ranked Results:**\n- **TC_MOBILITY_001** (TestCase): Test Mobility Failure - Verify mobility behavior during failure scenario using X2 protocol (score: 0.0361) [explicit]\n- **TC_PROTOCOL_121** (TestCase): Test Protocol Failure - Verify protocol behavior during failure scenario using X2 protocol (score: 0.0328) [inferred]\n\n**Evidence:**\n- \"TC_MOBILITY_001 Test Mobility Failure Verify mobility behavior during failure scenario using X2 protocol...\" (source: TC_MOBILITY_001)\n- \"TC_PROTOCOL_121 Test Protocol Failure Verify protocol behavior during failure scenario using X2 protocol...\" (source: TC_PROTOCOL_121)\n\n**Graph Paths:**\n- TC_MOBILITY_001 -[COVERS]-> FUNC_establish_bearer\n- TC_MOBILITY_001 -[COVERS]-> FUNC_log_event\n\n**Uncertainty:**\n- While TC_MOBILITY_001 explicitly mentions \"Mobility Failure,\" the specific requirement (REQ_*) it verifies was not directly linked in the traversal; the relationship to \"mobility failure\" is based on the test case's own description and functional coverage.",
+          "error": null,
+          "ragas_metrics": null,
+          "trial_number": 1,
+          "contexts_used": []
+        },
+        {
+          "query_id": "Q_SYN_002",
+          "query": "Identify the test for data failure with the GTP protocol.",
+          "query_type": "test_coverage",
+          "difficulty": "easy",
+          "retrieved_ids": [
+            "TC_DATA_002",
+            "TC_DATA_147",
+            "TC_PERFORMANCE_069",
+            "FUNC_flush_logs",
+            "TC_DATA_097",
+            "TC_MOBILITY_032",
+            "TC_SECURITY_088",
+            "TC_MOBILITY_042",
+            "TC_INTEGRATION_132",
+            "TC_PERFORMANCE_143",
+            "TC_SECURITY_152"
+          ],
+          "relevant_ids": [
+            "TC_DATA_002"
+          ],
+          "metrics": {
+            "precision@1": 1.0,
+            "recall@1": 1.0,
+            "f1@1": 1.0,
+            "precision@3": 0.3333333333333333,
+            "recall@3": 1.0,
+            "f1@3": 0.5,
+            "precision@5": 0.2,
+            "recall@5": 1.0,
+            "f1@5": 0.33333333333333337,
+            "precision@10": 0.1,
+            "recall@10": 1.0,
+            "f1@10": 0.18181818181818182,
+            "average_precision": 1.0,
+            "reciprocal_rank": 1.0
+          },
+          "tools_used": [
+            "hybrid_search",
+            "graph_traverse"
+          ],
+          "tool_call_count": 3,
+          "model_call_count": 4,
+          "execution_time_ms": 8184.17,
+          "found_any_relevant": true,
+          "first_relevant_rank": 1,
+          "final_answer": "**Answer Summary:**\nThe primary test case for data failure within the GTP protocol is **TC_DATA_002**. This test is specifically designed to verify system behavior during data failure scenarios using the GTP protocol.\n\n**Ranked Results:**\n- TC_DATA_002 (TestCase): Verify data behavior during failure scenario using GTP protocol (score: 10.5156) [explicit]\n- TC_DATA_147 (TestCase): Verify data behavior during timeout scenario using GTP protocol (score: 0.0344) [explicit]\n- TC_PERFORMANCE_069 (TestCase): Verify performance behavior during failure scenario using GTP protocol (score: 0.0338) [explicit]\n\n**Evidence:**\n- \"TC_DATA_002 Test Data Failure Verify data behavior during failure scenario using GTP protocol...\" (source: TC_DATA_002)\n\n**Graph Paths:**\n- TC_DATA_002 -[COVERS]-> FUNC_flush_logs (Function)\n\n**Uncertainty:**\n- The relationship between TC_DATA_002 and a specific requirement (REQ_*) was not explicitly found in the traversal, though its purpose is clearly defined in its metadata. The function `flush_logs` is covered by this test, likely for post-failure diagnostic analysis.",
+          "error": null,
+          "ragas_metrics": null,
+          "trial_number": 1,
+          "contexts_used": []
+        },
+        {
+          "query_id": "Q_SYN_003",
+          "query": "Which integration test checks 5G NR protocol failure?",
+          "query_type": "test_coverage",
+          "difficulty": "easy",
+          "retrieved_ids": [
+            "TC_AUTHENTICATION_123",
+            "TC_INTEGRATION_005",
+            "TC_SECURITY_077",
+            "REQ_AUTHENTICATION_037",
+            "FUNC_calculate_latency",
+            "TC_SECURITY_020",
+            "TC_MOBILITY_004",
+            "TC_SIGNALING_120",
+            "TC_SIGNALING_082",
+            "TC_PERFORMANCE_083",
+            "TC_AUTHENTICATION_060",
+            "TC_AUTHENTICATION_039",
+            "TC_SECURITY_152",
+            "TC_SECURITY_160",
+            "TC_PROTOCOL_170",
+            "TC_DATA_146",
+            "TC_DATA_046",
+            "TC_DATA_167",
+            "FUNC_verify_credentials"
+          ],
+          "relevant_ids": [
+            "TC_PROTOCOL_003"
+          ],
+          "metrics": {
+            "precision@1": 0.0,
+            "recall@1": 0.0,
+            "f1@1": 0.0,
+            "precision@3": 0.0,
+            "recall@3": 0.0,
+            "f1@3": 0.0,
+            "precision@5": 0.0,
+            "recall@5": 0.0,
+            "f1@5": 0.0,
+            "precision@10": 0.0,
+            "recall@10": 0.0,
+            "f1@10": 0.0,
+            "average_precision": 0.0,
+            "reciprocal_rank": 0.0
+          },
+          "tools_used": [
+            "hybrid_search",
+            "vector_search",
+            "graph_traverse"
+          ],
+          "tool_call_count": 4,
+          "model_call_count": 5,
+          "execution_time_ms": 11784.21,
+          "found_any_relevant": false,
+          "first_relevant_rank": null,
+          "final_answer": "**Answer Summary:**\nSeveral test cases involve 5G NR protocol scenarios, but **TC_AUTHENTICATION_123** specifically targets \"failure scenarios\" using the 5G NR protocol. While **TC_INTEGRATION_005** is explicitly labeled as an \"Integration\" test, it focuses on latency rather than protocol failure.\n\n**Ranked Results:**\n- **TC_AUTHENTICATION_123** (TestCase): Verify authentication behavior during failure scenario using 5G NR protocol (score: 0.0500) [explicit]\n- **TC_INTEGRATION_005** (TestCase): Verify integration behavior during latency scenario using 5G NR protocol (score: 0.0564) [explicit]\n- **TC_SECURITY_077** (TestCase): Verify security behavior during throughput scenario using 5G NR protocol (score: 0.0611) [explicit]\n\n**Evidence:**\n- \"TC_AUTHENTICATION_123 Test Authentication Failure Verify authentication behavior during failure scenario using 5G NR protocol...\" (source: TC_AUTHENTICATION_123)\n- \"TC_INTEGRATION_005 Test Integration Latency Verify integration behavior during latency scenario using 5G NR protocol...\" (source: TC_INTEGRATION_005)\n\n**Graph Paths:**\n- TC_AUTHENTICATION_123 -[VERIFIES]-> REQ_AUTHENTICATION_037 (critical MME authentication)\n- TC_INTEGRATION_005 -[COVERS]-> FUNC_calculate_latency\n\n**Uncertainty:**\n- While TC_AUTHENTICATION_123 covers protocol failure, it is categorized under \"Authentication\" rather than an \"Integration\" module, though authentication failure is a critical part of 5G protocol integration testing. No test named \"TC_INTEGRATION_FAILURE\" was found in the top results.",
+          "error": null,
+          "ragas_metrics": null,
+          "trial_number": 1,
+          "contexts_used": []
+        }
+      ]
+    }
+  }
+}
