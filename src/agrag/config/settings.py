@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     langchain_project: str = "agrag-test-scope-analysis"
     langchain_endpoint: str = "https://api.smith.langchain.com"
 
+    # LangSmith env alias support
+    langsmith_tracing: Optional[bool] = None
+    langsmith_api_key: Optional[str] = None
+    langsmith_project: Optional[str] = None
+    langsmith_endpoint: Optional[str] = None
+
     # Ragas Configuration
     ragas_model: str = "gemini-3-flash-preview"
     ragas_max_retries: int = 3
@@ -125,6 +131,26 @@ class Settings(BaseSettings):
         """Validate LangSmith configuration."""
         if self.langchain_tracing_v2 and not self.langchain_api_key:
             raise ValueError("LANGCHAIN_API_KEY must be set when LangSmith tracing is enabled")
+
+    def model_post_init(self, __context: object) -> None:
+        """Apply LANGSMITH_* aliases when LANGCHAIN_* settings are missing."""
+        if self.langsmith_tracing is not None and "LANGCHAIN_TRACING_V2" not in os.environ:
+            self.langchain_tracing_v2 = self.langsmith_tracing
+
+        if not self.langchain_api_key and self.langsmith_api_key:
+            self.langchain_api_key = self.langsmith_api_key
+
+        if (
+            self.langchain_project == "agrag-test-scope-analysis"
+            and self.langsmith_project
+        ):
+            self.langchain_project = self.langsmith_project
+
+        if (
+            self.langchain_endpoint == "https://api.smith.langchain.com"
+            and self.langsmith_endpoint
+        ):
+            self.langchain_endpoint = self.langsmith_endpoint
 
     @field_validator("google_thinking_level")
     @classmethod

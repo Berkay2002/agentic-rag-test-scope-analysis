@@ -30,7 +30,10 @@ class LangSmithEvaluator:
         num_trials: int = 1,
     ):
         """Initialize LangSmith client and configuration."""
-        self.client = Client()
+        self.client = Client(
+            api_key=settings.langchain_api_key,
+            api_url=settings.langchain_endpoint,
+        )
         self.project_name = project_name
         self.use_ragas = use_ragas
         self.num_trials = max(1, num_trials)

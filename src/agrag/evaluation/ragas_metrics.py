@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import hashlib
 import logging
 import time
@@ -31,7 +32,7 @@ def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0):
     """Decorator for exponential backoff on transient API failures."""
 
     def decorator(func: Callable[..., Awaitable[T]] | Callable[..., T]):
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
 
             async def async_wrapper(*args: Any, **kwargs: Any) -> T:
                 delay = base_delay

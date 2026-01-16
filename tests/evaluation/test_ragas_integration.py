@@ -14,6 +14,10 @@ def ragas_evaluator(monkeypatch):
         "agrag.evaluation.ragas_metrics.get_embedding_service",
         lambda: _DummyEmbeddingService(),
     )
+    monkeypatch.setattr(
+        "agrag.evaluation.ragas_metrics.Dataset.from_dict",
+        lambda data: data,
+    )
     return RagasEvaluator(model_name="dummy", max_retries=3, api_key="test")
 
 

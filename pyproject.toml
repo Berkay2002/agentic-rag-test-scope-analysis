@@ -54,7 +54,7 @@ rich = "^14.2.0"
 prompt-toolkit = "^3.0.0"
 rank-bm25 = "^0.2.2"
 scikit-learn = "^1.8.0"
-python-levenshtein = "^0.26.1"
+python-levenshtein = {version = "^0.26.1", python = "<3.14"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.2"
@@ -93,4 +93,5 @@ filterwarnings = [
     "ignore:.*asyncio\\.iscoroutinefunction.*:DeprecationWarning:neo4j.*",
     "ignore:Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.*:UserWarning:langchain_core.*",
     "ignore:.*_UnionGenericAlias.*:DeprecationWarning:google\\.genai.*",
+    "ignore:.*asyncio.get_event_loop_policy.*:DeprecationWarning:nest_asyncio.*",
 ]
