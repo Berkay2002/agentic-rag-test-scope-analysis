@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from agrag.cli.thinking import handle_thinking_command, format_thinking_budget
+from agrag.cli.thinking import handle_thinking_command, format_thinking_setting
 
 # Import colors from display module
 from agrag.cli.display import COLORS
@@ -25,6 +25,7 @@ class ChatSessionProtocol(Protocol):
     model_calls_total: int
     start_time: datetime
     thinking_budget: Optional[int]
+    thinking_level: Optional[str]
     enable_hitl: bool
     verbose: bool
 
@@ -54,7 +55,7 @@ def print_help(console: Console) -> None:
     commands_table.add_row("/save", "Save conversation to file")
     commands_table.add_row("/export [file] [--verbose]", "Export conversation transcript")
     commands_table.add_row("/verbose [on|off]", "Toggle tool call details")
-    commands_table.add_row("/thinking [budget]", "View or set thinking budget")
+    commands_table.add_row("/thinking [level|budget]", "View or set thinking configuration")
     commands_table.add_row("/exit, /quit", "Exit the chat")
 
     # Example queries
@@ -114,7 +115,10 @@ def print_stats(console: Console, session: ChatSessionProtocol) -> None:
     mode_display.append(mode_text, style=mode_style)
     stats_table.add_row("Mode:", mode_display)
 
-    stats_table.add_row("Thinking Budget:", f"{format_thinking_budget(session.thinking_budget)}")
+    stats_table.add_row(
+        "Thinking:",
+        f"{format_thinking_setting(session.thinking_level, session.thinking_budget)}",
+    )
 
     # Title
     title = Text()
@@ -257,11 +261,14 @@ class CommandHandler:
             self.console.print(f"[green]✓ Verbose mode is now {state}[/green]")
 
         elif command.startswith("/thinking"):
-            new_budget = handle_thinking_command(
-                self.console, raw_command, self.session.thinking_budget
+            new_setting = handle_thinking_command(
+                self.console,
+                raw_command,
+                self.session.thinking_level,
+                self.session.thinking_budget,
             )
-            if new_budget is not None:
-                self.session.thinking_budget = new_budget
+            if new_setting is not None:
+                self.session.thinking_level, self.session.thinking_budget = new_setting
 
         else:
             self.console.print(f"[red]Unknown command: {command}[/red]")

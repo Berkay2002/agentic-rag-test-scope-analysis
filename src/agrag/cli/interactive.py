@@ -105,6 +105,7 @@ class InteractiveChat:
         self.tool_calls_total = 0
         self.model_calls_total = 0
         self.start_time = datetime.now()
+        self.thinking_level = settings.google_thinking_level
         self.thinking_budget = settings.google_thinking_budget
 
     def _init_checkpointer(self) -> None:

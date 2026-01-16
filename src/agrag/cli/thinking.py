@@ -1,4 +1,4 @@
-"""Thinking budget configuration for Gemini models."""
+"""Thinking configuration for Gemini models."""
 
 from typing import Optional
 
@@ -7,6 +7,8 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from agrag.config import settings
+
+THINKING_LEVELS = {"low", "medium", "high", "minimal"}
 
 THINKING_PRESETS = {
     "low": 256,
@@ -39,6 +41,15 @@ def format_thinking_budget(value: Optional[int]) -> str:
     return label
 
 
+def format_thinking_setting(
+    thinking_level: Optional[str], thinking_budget: Optional[int]
+) -> str:
+    """Return a friendly label for the current thinking setting."""
+    if thinking_level:
+        return f"Level: {thinking_level}"
+    return f"Budget: {format_thinking_budget(thinking_budget)}"
+
+
 def print_thinking_help(console: Console) -> None:
     """Display thinking configuration help.
 
@@ -49,11 +60,18 @@ def print_thinking_help(console: Console) -> None:
         f"- `{name}` = {budget if budget != -1 else '-1 (dynamic)'} tokens"
         for name, budget in THINKING_PRESETS.items()
     )
+    level_details = "\n".join(f"- `{level}`" for level in sorted(THINKING_LEVELS))
     help_text = f"""
 **Thinking Settings**
 - `/thinking` - Show current setting
-- `/thinking <preset>` - Apply preset (low, medium, high, dynamic) or an integer token budget
+- `/thinking <level>` - Set Gemini 3 thinking level ({', '.join(sorted(THINKING_LEVELS))})
+- `/thinking <preset>` - Apply legacy budget preset (low, medium, high, dynamic)
+- `/thinking <int>` - Set legacy thinking budget tokens
 
+**Levels**
+{level_details}
+
+**Budget Presets**
 {preset_details}
 
 Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e.g., `/thinking 512`).
@@ -66,28 +84,36 @@ Use `dynamic` (-1) to let the model decide, or provide a numeric token budget (e
 def handle_thinking_command(
     console: Console,
     raw_command: str,
+    current_level: Optional[str],
     current_budget: Optional[int],
-) -> Optional[int]:
+) -> Optional[tuple[Optional[str], Optional[int]]]:
     """Handle the /thinking command.
 
     Args:
         console: Rich console for output.
         raw_command: The full command string.
+        current_level: Current thinking level value.
         current_budget: Current thinking budget value.
 
     Returns:
-        New thinking budget if changed, None otherwise.
+        Tuple of (thinking_level, thinking_budget) if changed, None otherwise.
     """
     parts = raw_command.split()
 
     if len(parts) == 1:
         console.print(
-            f"[cyan]Current thinking budget:[/cyan] {format_thinking_budget(current_budget)}"
+            f"[cyan]Current thinking setting:[/cyan] {format_thinking_setting(current_level, current_budget)}"
         )
         print_thinking_help(console)
         return None
 
     target = parts[1].lower()
+    if target in THINKING_LEVELS:
+        settings.google_thinking_level = target
+        settings.google_thinking_budget = None
+        console.print(f"[green]✓ Thinking level set to {target}[/green]")
+        return (target, None)
+
     if target in THINKING_PRESETS:
         value = THINKING_PRESETS[target]
     else:
@@ -95,10 +121,12 @@ def handle_thinking_command(
             value = int(target)
         except ValueError:
             console.print(
-                "[red]Invalid thinking value. Use a preset (low/medium/high/dynamic) or integer tokens.[/red]"
+                "[red]Invalid thinking value. Use a level (low/medium/high/minimal), "
+                "a preset (low/medium/high/dynamic), or integer tokens.[/red]"
             )
             return None
 
+    settings.google_thinking_level = None
     settings.google_thinking_budget = value
     console.print(f"[green]✓ Thinking budget set to {format_thinking_budget(value)}[/green]")
-    return value
+    return (None, value)

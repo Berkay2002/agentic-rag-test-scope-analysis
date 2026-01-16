@@ -106,7 +106,7 @@ def test_type_conversion():
             "max_tool_calls": "10",  # string to int
             "agent_temperature": "0.7",  # string to float
             "enable_pii_detection": "false",  # string to bool
-            "google_model": "gemini-3.0-flash-preview"  # use valid model name
+            "google_model": "gemini-3-flash-preview"  # use valid model name
         }
     )
 
@@ -117,7 +117,7 @@ def test_type_conversion():
         assert settings.max_tool_calls == 10, f"String to int conversion failed! Got {settings.max_tool_calls}"
         assert settings.agent_temperature == 0.7, f"String to float conversion failed! Got {settings.agent_temperature}"
         assert settings.enable_pii_detection == False, f"String to bool conversion failed! Got {settings.enable_pii_detection}"
-        assert settings.google_model == "gemini-3.0-flash-preview", f"String assignment failed! Got {settings.google_model}"
+        assert settings.google_model == "gemini-3-flash-preview", f"String assignment failed! Got {settings.google_model}"
         print("✓ Type conversion works correctly!")
     else:
         print("⚠ Type conversion test failed - execution error")
