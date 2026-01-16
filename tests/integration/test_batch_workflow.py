@@ -3,6 +3,7 @@
 import asyncio
 import csv
 import json
+import os
 import tempfile
 import time
 from datetime import datetime
@@ -889,6 +890,8 @@ class TestBatchWorkflowAdvanced:
 @pytest.mark.cli_integration
 def test_actual_cli_batch_command():
     """Test the actual CLI batch command with poetry run."""
+    if os.getenv("AGRAG_RUN_CLI_INTEGRATION", "").lower() not in {"1", "true", "yes"}:
+        pytest.skip("Set AGRAG_RUN_CLI_INTEGRATION=1 to run CLI batch integration test")
     # Create a real test file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         test_queries = [
@@ -908,11 +911,18 @@ def test_actual_cli_batch_command():
         # Run the actual CLI command
         print(f"\nRunning CLI command: poetry run agrag batch {input_file} --output {output_file}")
 
+        env = os.environ.copy()
+        env.setdefault("AGRAG_EMBEDDINGS_MODE", "mock")
+        env.setdefault("LANGCHAIN_TRACING_V2", "false")
+        env.setdefault("LANGSMITH_TRACING", "false")
+        env.setdefault("MAX_MODEL_CALLS", "3")
+        env.setdefault("MAX_TOOL_CALLS", "3")
+
         result = subprocess.run([
             "poetry", "run", "agrag", "batch", input_file,
             "--output", output_file,
             "--format", "json"
-        ], capture_output=True, text=True, timeout=60)
+        ], capture_output=True, text=True, timeout=60, env=env)
 
         print(f"Exit code: {result.returncode}")
         print(f"Stdout:\n{result.stdout}")

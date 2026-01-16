@@ -10,10 +10,6 @@ from agrag.evaluation.langsmith_evaluator import LangSmithEvaluator
     not settings.langchain_api_key,
     reason="LangSmith API key not configured",
 )
-@pytest.mark.skipif(
-    not settings.google_api_key,
-    reason="Google API key not configured for Ragas",
-)
 class TestLangSmithIntegration:
     @pytest.fixture
     def evaluator(self):

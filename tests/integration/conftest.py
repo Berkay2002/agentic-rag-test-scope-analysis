@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -47,5 +48,7 @@ def neo4j_client() -> Neo4jClient:
 
 @pytest.fixture(scope="session")
 def embedding_available() -> None:
+    if os.getenv("GITHUB_ACTIONS", "").lower() == "true":
+        pytest.skip("Skipping embedding API usage in GitHub Actions")
     if not settings.google_api_key:
         pytest.skip("GOOGLE_API_KEY not configured for embeddings")
