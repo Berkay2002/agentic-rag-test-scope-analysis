@@ -1188,6 +1188,7 @@ class TelecomDataGenerator:
         file_to_funcs = self._build_file_to_functions_map(relationships)
         file_to_component = self._build_file_to_component_map(relationships)
         test_lookup = {t["id"]: t for t in test_cases}
+        requirement_lookup = {r["id"]: r for r in requirements}
         func_lookup = {f["id"]: f for f in functions}
 
         # Group tests by various attributes
@@ -1640,6 +1641,16 @@ class TelecomDataGenerator:
             query_id += 1
 
         # Build final dataset
+        for query in queries:
+            query["reference_answer"] = self.generate_reference_answer(
+                query=query.get("query", ""),
+                query_type=query.get("query_type", "unknown"),
+                relevant_ids=query.get("relevant_ids", []),
+                test_lookup=test_lookup,
+                requirement_lookup=requirement_lookup,
+                function_lookup=func_lookup,
+            )
+
         dataset = {
             "queries": queries,
             "metadata": {
@@ -1661,6 +1672,121 @@ class TelecomDataGenerator:
         logger.info(f"Distribution: {dataset['metadata']['difficulty_distribution']}")
 
         return dataset
+
+    def generate_reference_answer(
+        self,
+        query: str,
+        query_type: str,
+        relevant_ids: List[str],
+        test_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+        requirement_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+        function_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> str:
+        """
+        Generate a reference answer for evaluation queries.
+
+        Args:
+            query: Query text
+            query_type: Query type tag
+            relevant_ids: Relevant entity IDs for the query
+            test_lookup: Optional lookup of test case metadata
+            requirement_lookup: Optional lookup of requirement metadata
+            function_lookup: Optional lookup of function metadata
+
+        Returns:
+            Reference answer string
+        """
+        if not relevant_ids:
+            return "No relevant entities were found for this query."
+
+        test_ids = [rid for rid in relevant_ids if rid.startswith("TC_")]
+        requirement_ids = [rid for rid in relevant_ids if rid.startswith("REQ_")]
+        function_ids = [rid for rid in relevant_ids if rid.startswith("FUNC_")]
+        component_ids = [rid for rid in relevant_ids if rid.startswith("COMP_")]
+        file_ids = [rid for rid in relevant_ids if rid.startswith("FILE_")]
+
+        def _format_ids(ids: List[str]) -> str:
+            return ", ".join(ids) if ids else ""
+
+        def _format_tests(ids: List[str]) -> str:
+            if not ids:
+                return ""
+            if not test_lookup:
+                return _format_ids(ids)
+            labels = []
+            for tid in ids:
+                name = test_lookup.get(tid, {}).get("name")
+                labels.append(f"{tid} ({name})" if name else tid)
+            return ", ".join(labels)
+
+        def _format_requirements(ids: List[str]) -> str:
+            if not ids:
+                return ""
+            if not requirement_lookup:
+                return _format_ids(ids)
+            labels = []
+            for rid in ids:
+                desc = requirement_lookup.get(rid, {}).get("description")
+                labels.append(f"{rid} ({desc})" if desc else rid)
+            return ", ".join(labels)
+
+        def _format_functions(ids: List[str]) -> str:
+            if not ids:
+                return ""
+            if not function_lookup:
+                return _format_ids(ids)
+            labels = []
+            for fid in ids:
+                name = function_lookup.get(fid, {}).get("name")
+                labels.append(f"{fid} ({name})" if name else fid)
+            return ", ".join(labels)
+
+        if query_type in {"requirement_coverage", "find_tests_for_requirement"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            requirement = _format_requirements(requirement_ids)
+            if requirement:
+                return f"The following tests verify {requirement}: {tests}."
+            return f"The following tests verify the requirement: {tests}."
+
+        if query_type in {"function_coverage", "cross_entity", "multi_hop_traversal"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            functions = _format_functions(function_ids)
+            if functions:
+                return f"Tests covering these functions: {functions}. Related tests: {tests}."
+            return f"Tests covering the related functions: {tests}."
+
+        if query_type in {"coverage_by_component"}:
+            components = _format_ids(component_ids or relevant_ids)
+            return f"Components covering the requirement: {components}."
+
+        if query_type in {"impact_analysis", "change_request_tests"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            files = _format_ids(file_ids)
+            if files:
+                return f"Changes impacting {files} affect these tests: {tests}."
+            return f"The following tests are impacted: {tests}."
+
+        if query_type in {"coverage_gap"}:
+            requirements = _format_requirements(requirement_ids or relevant_ids)
+            return f"Requirements without test coverage: {requirements}."
+
+        if query_type in {"suite_membership", "feature_filter", "result_filter", "priority_filter", "type_filter", "combined_filter", "tag_filter", "compound_filter"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            return f"Relevant tests: {tests}."
+
+        if query_type in {"failure_triage"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            return f"Tests associated with the failure: {tests}."
+
+        if query_type in {"aggregation"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            return f"The relevant tests for this aggregation query are: {tests}."
+
+        if query_type in {"entity_lookup"}:
+            tests = _format_tests(test_ids or relevant_ids)
+            return f"The matching entity is {tests}."
+
+        return f"Relevant entities: {_format_ids(relevant_ids)}."
 
     def _create_query(
         self,
