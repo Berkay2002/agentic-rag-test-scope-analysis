@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Google Generative AI
     google_api_key: Optional[str] = None
-    google_model: str = "gemini-2.0-flash-exp"
+    google_model: str = "gemini-3.0-flash-preview"
     google_embedding_model: str = "models/text-embedding-004"
     google_thinking_level: Optional[str] = None
     google_thinking_budget: Optional[int] = None

@@ -83,7 +83,7 @@ class RagasEvaluator:
 
     def __init__(
         self,
-        model_name: str = "gemini-2.0-flash-exp",
+        model_name: str = "gemini-3.0-flash-preview",
         max_retries: int = 3,
         api_key: Optional[str] = None,
     ):
