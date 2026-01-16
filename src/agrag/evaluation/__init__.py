@@ -41,6 +41,10 @@ from .expansion_metrics import (
     calculate_expansion_metrics,
 )
 
+from .langsmith_evaluator import (
+    LangSmithEvaluator,
+)
+
 __all__ = [
     # Metrics
     "precision_at_k",
@@ -71,4 +75,6 @@ __all__ = [
     "calculate_diversity_metrics",
     # Expansion metrics
     "calculate_expansion_metrics",
+    # LangSmith evaluation
+    "LangSmithEvaluator",
 ]
