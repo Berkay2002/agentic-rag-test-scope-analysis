@@ -24,6 +24,7 @@ from agrag.tools.diversification import (
     ClusteringDiversifier,
     DedupingDiversifier,
 )
+from agrag.tools.search_utils import extract_signal_tokens
 from agrag.storage import PostgresClient
 from agrag.storage.retry_decorators import with_fallback
 from agrag.models import get_embedding_service
@@ -82,7 +83,7 @@ def _merge_hybrid_results(
 
     logger.info(f"Merged {len(all_results)} results into {len(merged_results)} unique results")
 
-    return merged_results[:k * 2]  # Return more than needed for further processing
+    return merged_results[:k * 5]  # Return more than needed for further processing
 
 
 def _expand_queries(
@@ -187,6 +188,78 @@ def _apply_diversification(
     except Exception as e:
         logger.error(f"Diversification failed with method '{method}': {e}")
         return results
+
+
+def _boost_signal_token_matches(
+    results: List[SearchResult],
+    query: str,
+    any_match_multiplier: float = 1.5,
+    all_match_multiplier: float = 2.0,
+) -> List[SearchResult]:
+    """Boost results that contain high-signal query tokens in their content."""
+    signal_tokens = extract_signal_tokens(query)
+    if not signal_tokens:
+        return results
+
+    lower_tokens = [token.lower() for token in signal_tokens]
+    for result in results:
+        content_lower = (result.content or "").lower()
+        matches = [token for token in lower_tokens if token in content_lower]
+        if not matches:
+            continue
+        if len(matches) == len(lower_tokens):
+            result.score *= all_match_multiplier
+        else:
+            result.score *= any_match_multiplier
+    return results
+
+
+def _ensure_signal_match_in_top_k(
+    results: List[SearchResult],
+    query: str,
+    client: PostgresClient,
+    k: int,
+    metadata_filter: Optional[Dict[str, Any]],
+) -> List[SearchResult]:
+    """Ensure at least one top-k result matches all signal tokens using keyword fallback."""
+    signal_tokens = extract_signal_tokens(query)
+    if not signal_tokens or not results:
+        return results
+
+    lower_tokens = [token.lower() for token in signal_tokens]
+
+    def has_all_tokens(result: SearchResult) -> bool:
+        content_lower = (result.content or "").lower()
+        return all(token in content_lower for token in lower_tokens)
+
+    if any(has_all_tokens(result) for result in results[:k]):
+        return results
+
+    try:
+        keyword_raw = client.keyword_search(
+            query=query,
+            k=k * 5,
+            metadata_filter=metadata_filter if metadata_filter else None,
+        )
+        keyword_results = process_search_results(
+            raw_results=keyword_raw,
+            score_field="rank",
+            source_name="keyword_fallback",
+        )
+    except Exception as exc:
+        logger.warning(f"Keyword fallback failed for signal token boost: {exc}")
+        return results
+
+    for candidate in keyword_results:
+        if has_all_tokens(candidate):
+            # Promote candidate to top with a slight boost
+            if results:
+                candidate.score = max(candidate.score, results[0].score * 1.1)
+            results = [result for result in results if result.id != candidate.id]
+            results.insert(0, candidate)
+            break
+
+    return results
 
 
 def _keyword_only_search(
@@ -306,7 +379,7 @@ def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
                         client=client,
                         query=expanded_query,
                         query_embedding=query_embedding,
-                        k=k * 2,  # Get more results to allow for merging
+                        k=k * 5,  # Get more results to allow for merging/boosting
                         rrf_k=rrf_k,
                         metadata_filter=metadata_filter if metadata_filter else None,
                     )
@@ -339,17 +412,28 @@ def create_hybrid_search_tool(postgres_client: Optional[PostgresClient] = None):
                 source_name="hybrid",
             )
 
+            # Boost results that match high-signal query tokens (e.g., X2, GTP)
+            boosted_results = _boost_signal_token_matches(search_results, query=query)
+            boosted_results = _ensure_signal_match_in_top_k(
+                results=boosted_results,
+                query=query,
+                client=client,
+                k=k,
+                metadata_filter=metadata_filter if metadata_filter else None,
+            )
+            boosted_results.sort(key=lambda result: result.score, reverse=True)
+
             # Use original query embedding for diversification if available
             diversification_embedding = original_query_embedding or embedding_service.embed_query(query)
 
             # Apply diversification if enabled
             diversified_results = _apply_diversification(
-                results=search_results,
+                results=boosted_results,
                 enable=enable_diversification,
                 method=diversification_method,
                 diversity_factor=diversity_factor,
                 dedup_threshold=deduplication_threshold,
-                k=min(k, len(search_results)),
+                k=min(k, len(boosted_results)),
                 query_embedding=diversification_embedding
             )
 

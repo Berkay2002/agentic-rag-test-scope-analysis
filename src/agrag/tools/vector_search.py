@@ -20,6 +20,7 @@ from agrag.tools.diversification import (
     ClusteringDiversifier,
     DedupingDiversifier,
 )
+from agrag.tools.search_utils import extract_signal_tokens
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
 from agrag.kg.ontology import NodeLabel
@@ -99,6 +100,73 @@ def _apply_diversification(
     except Exception as e:
         logger.error(f"Diversification failed with method {method}: {e}")
         return results
+
+
+def _ensure_signal_match_in_top_k(
+    results: list[SearchResult],
+    query: str,
+    client,
+    k: int,
+    node_type: Optional[NodeLabel],
+) -> list[SearchResult]:
+    """Ensure top-k includes at least one signal-token match via keyword fallback."""
+    signal_tokens = extract_signal_tokens(query)
+    if not signal_tokens or not results:
+        return results
+
+    lower_tokens = [token.lower() for token in signal_tokens]
+    stopwords = {
+        "which",
+        "test",
+        "case",
+        "verify",
+        "verifies",
+        "using",
+        "find",
+        "handling",
+    }
+    import re
+
+    topical_tokens = [
+        token.lower()
+        for token in re.findall(r"[A-Za-z]{4,}", query)
+        if token.lower() not in stopwords
+    ]
+
+    def has_all_tokens(result: SearchResult) -> bool:
+        content_lower = (result.content or "").lower()
+        has_signal = all(token in content_lower for token in lower_tokens)
+        has_topic = any(token in content_lower for token in topical_tokens) if topical_tokens else True
+        return has_signal and has_topic
+
+    if any(has_all_tokens(result) for result in results[:k]):
+        return results
+
+    metadata_filter = {"entity_type": node_type.value} if node_type else None
+    try:
+        keyword_raw = client.keyword_search(
+            query=query,
+            k=k * 5,
+            metadata_filter=metadata_filter,
+        )
+        keyword_results = process_search_results(
+            raw_results=keyword_raw,
+            score_field="rank",
+            source_name="keyword_fallback",
+        )
+    except Exception as exc:
+        logger.warning(f"Keyword fallback failed for vector search: {exc}")
+        return results
+
+    for candidate in keyword_results:
+        if has_all_tokens(candidate):
+            if results:
+                candidate.score = max(candidate.score, results[0].score * 1.1)
+            results = [result for result in results if result.id != candidate.id]
+            results.insert(0, candidate)
+            break
+
+    return results
 
 
 def _expand_queries(
@@ -382,14 +450,23 @@ def _vector_search_core(
             score_filter_fn=score_filter_fn,
         )
 
+        # Ensure signal-token matches are present in top-k
+        boosted_results = _ensure_signal_match_in_top_k(
+            results=search_results,
+            query=query,
+            client=client,
+            k=k,
+            node_type=node_type,
+        )
+
         # Apply diversification if enabled
         diversified_results = _apply_diversification(
-            results=search_results,
+            results=boosted_results,
             enable=enable_diversification,
             method=diversification_method,
             diversity_factor=diversity_factor,
             dedup_threshold=deduplication_threshold,
-            k=min(k, len(search_results))
+            k=min(k, len(boosted_results))
         )
 
         retrieval_time_ms = (time.time() - start_time) * 1000

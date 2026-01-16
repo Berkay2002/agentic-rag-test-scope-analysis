@@ -976,18 +976,33 @@ def _execute_retrieval(
         List of retrieved entity IDs
     """
     try:
+        from agrag.config.settings import settings
+
+        expansion_kwargs = {}
+        if settings.enable_query_expansion:
+            expansion_kwargs = {
+                "enable_query_expansion": True,
+                "expansion_methods": ["synonyms"],
+                "max_expansions": settings.max_query_expansions,
+            }
+
         if strategy_name == "vector":
             # Vector search returns formatted string, need to parse
-            result_str = tool.invoke({"query": query, "k": k, "node_type": "TestCase"}, config={})
+            result_str = tool.invoke(
+                {"query": query, "k": k, "node_type": "TestCase", **expansion_kwargs},
+                config={},
+            )
             return _parse_result_ids(result_str)
         elif strategy_name == "keyword":
             result_str = tool.invoke(
-                {"query": query, "k": k, "entity_type": "TestCase"}, config={}
+                {"query": query, "k": k, "entity_type": "TestCase", **expansion_kwargs},
+                config={},
             )
             return _parse_result_ids(result_str)
         elif strategy_name == "hybrid":
             result_str = tool.invoke(
-                {"query": query, "k": k, "entity_type": "TestCase"}, config={}
+                {"query": query, "k": k, "entity_type": "TestCase", **expansion_kwargs},
+                config={},
             )
             return _parse_result_ids(result_str)
         elif strategy_name == "graph":
@@ -1046,6 +1061,38 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
             start_node_id = match.group()
             start_node_label = label
             break
+
+    if not start_node_id:
+        # No entity ID found in query - attempt seed extraction via keyword search
+        try:
+            from agrag.storage import PostgresClient
+
+            client = PostgresClient()
+            keyword_results = client.keyword_search(
+                query=query,
+                k=5,
+                metadata_filter={"entity_type": NodeLabel.TEST_CASE.value},
+            )
+            if keyword_results:
+                from agrag.tools.search_utils import extract_signal_tokens
+
+                signal_tokens = [token.lower() for token in extract_signal_tokens(query)]
+
+                chosen = keyword_results[0]
+                if signal_tokens:
+                    for candidate in keyword_results:
+                        content_lower = (candidate.get("content") or "").lower()
+                        if all(token in content_lower for token in signal_tokens):
+                            chosen = candidate
+                            break
+
+                seed_metadata = chosen.get("metadata") or {}
+                start_node_id = seed_metadata.get("entity_id")
+                start_node_label = NodeLabel.TEST_CASE
+        except Exception as exc:
+            logger.debug(
+                f"Graph seed extraction failed for query '{query[:50]}...': {exc}"
+            )
 
     if not start_node_id:
         # No entity ID found in query - graph traversal not applicable

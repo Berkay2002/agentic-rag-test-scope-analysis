@@ -354,12 +354,12 @@ class PostgresClient:
                 rrf_scores[chunk_id] = 1 / (rrf_k + rank)
                 rrf_docs[chunk_id] = result
 
-        # Sort by RRF score and take top k
+        # Sort by RRF score (let caller apply final k-limit)
         sorted_results = sorted(
             rrf_scores.items(),
             key=lambda x: x[1],
             reverse=True,
-        )[:k]
+        )
 
         # Build final results
         final_results = []

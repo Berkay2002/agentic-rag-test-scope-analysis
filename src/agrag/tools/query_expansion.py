@@ -20,6 +20,11 @@ class SynonymExpander:
         "performance": ["speed", "latency", "throughput", "response time"],
         "network": ["net", "connection", "link", "interface"],
         "protocol": ["procedure", "standard", "specification", "interface"],
+        "x2": ["x2 interface", "x2 handover", "inter-enb"],
+        "gtp": ["gtp-u", "gtp data", "tunnel"],
+        "mobility": ["handover", "roaming", "x2 handover"],
+        "handover": ["mobility", "x2 handover", "s1 handover"],
+        "data": ["user-plane", "payload", "gtp data"],
     }
 
     def __init__(self, custom_synonyms: Optional[Dict[str, List[str]]] = None):

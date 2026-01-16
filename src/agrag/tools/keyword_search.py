@@ -175,13 +175,14 @@ def _execute_multi_query_search(
     if not all_results:
         return []
 
-    # Deduplicate by content_id, keeping highest score
+    # Deduplicate by result id, keeping highest score
     seen_ids = {}
     deduped_results = []
 
     for result in all_results:
-        if result.content_id not in seen_ids or result.score > seen_ids[result.content_id].score:
-            seen_ids[result.content_id] = result
+        result_id = result.id
+        if result_id not in seen_ids or result.score > seen_ids[result_id].score:
+            seen_ids[result_id] = result
 
     deduped_results = list(seen_ids.values())
 

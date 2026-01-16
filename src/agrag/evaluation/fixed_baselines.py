@@ -47,12 +47,17 @@ def _infer_entity_type_from_id(entity_id: str) -> str | None:
 
 def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
     from agrag.cli.main import _parse_result_ids
+    from agrag.config.settings import settings
 
     inferred_type = _infer_entity_type_from_id(query)
     entity_type = inferred_type or NodeLabel.TEST_CASE.value
     kwargs = {"query": query, "k": k}
     if entity_type:
         kwargs["entity_type"] = entity_type
+    if settings.enable_query_expansion:
+        kwargs["enable_query_expansion"] = True
+        kwargs["expansion_methods"] = ["synonyms"]
+        kwargs["max_expansions"] = settings.max_query_expansions
 
     result_str = _invoke_tool(hybrid_tool, **kwargs)
     ids = _parse_result_ids(result_str)
