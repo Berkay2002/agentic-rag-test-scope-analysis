@@ -64,7 +64,7 @@ def print_welcome(
     commands_table.add_row("/save", "Save conversation to file")
     commands_table.add_row("/export", "Export transcript (add --verbose for tool details)")
     commands_table.add_row("/verbose", "Toggle tool call arguments")
-    commands_table.add_row("/thinking", "View or set thinking budget")
+    commands_table.add_row("/thinking", "View or set thinking configuration")
     commands_table.add_row("/exit", "Exit the chat")
 
     # Build tips
@@ -214,6 +214,130 @@ def print_error(console: Console, message: str, traceback_str: str | None = None
     header.append("Error", style=f"bold {COLORS['error']}")
 
     console.print()
+
+
+def format_summary_table(
+    summary,
+    include_ragas: bool = False,
+    include_trials: bool = False,
+) -> str:
+    """Format evaluation summary as an ASCII table."""
+
+    def _format_value(value: float | None) -> str:
+        if value is None:
+            return "-"
+        return f"{value:.3f}"
+
+    mean_metrics = {}
+    std_metrics = {}
+    if include_trials and getattr(summary, "trial_statistics", None):
+        trial_stats = summary.trial_statistics or {}
+        mean_metrics = trial_stats.get("mean_metrics", {})
+        std_metrics = trial_stats.get("std_metrics", {})
+
+    k_values = sorted(
+        set(summary.avg_precision_at_k.keys())
+        | set(summary.avg_recall_at_k.keys())
+        | set(summary.avg_f1_at_k.keys())
+    )
+
+    rows = []
+
+    rows.append(
+        (
+            "MAP",
+            _format_value(mean_metrics.get("average_precision", summary.map_score)),
+            _format_value(std_metrics.get("average_precision")) if include_trials else "-",
+        )
+    )
+    rows.append(
+        (
+            "MRR",
+            _format_value(mean_metrics.get("reciprocal_rank", summary.mrr_score)),
+            _format_value(std_metrics.get("reciprocal_rank")) if include_trials else "-",
+        )
+    )
+
+    for k in k_values:
+        rows.append(
+            (
+                f"Precision@{k}",
+                _format_value(mean_metrics.get(f"precision@{k}", summary.avg_precision_at_k.get(k))),
+                _format_value(std_metrics.get(f"precision@{k}")) if include_trials else "-",
+            )
+        )
+        rows.append(
+            (
+                f"Recall@{k}",
+                _format_value(mean_metrics.get(f"recall@{k}", summary.avg_recall_at_k.get(k))),
+                _format_value(std_metrics.get(f"recall@{k}")) if include_trials else "-",
+            )
+        )
+        rows.append(
+            (
+                f"F1@{k}",
+                _format_value(mean_metrics.get(f"f1@{k}", summary.avg_f1_at_k.get(k))),
+                _format_value(std_metrics.get(f"f1@{k}")) if include_trials else "-",
+            )
+        )
+
+    if include_ragas and summary.avg_ragas_metrics:
+        for metric_key, metric_value in summary.avg_ragas_metrics.items():
+            label = metric_key.replace("_", " ").title()
+            rows.append((label, _format_value(metric_value), "-"))
+
+    headers = ("Metric", "Mean", "Std Dev")
+    col_widths = [len(h) for h in headers]
+    for row in rows:
+        for idx, cell in enumerate(row):
+            col_widths[idx] = max(col_widths[idx], len(cell))
+
+    def _line(left: str, mid: str, right: str, fill: str) -> str:
+        return (
+            left
+            + mid.join(fill * (w + 2) for w in col_widths)
+            + right
+        )
+
+    lines = [_line("┌", "┬", "┐", "─")]
+    header_cells = [f" {headers[i].ljust(col_widths[i])} " for i in range(3)]
+    lines.append("│" + "│".join(header_cells) + "│")
+    lines.append(_line("├", "┼", "┤", "─"))
+
+    for row in rows:
+        cells = [f" {row[i].ljust(col_widths[i])} " for i in range(3)]
+        lines.append("│" + "│".join(cells) + "│")
+
+    lines.append(_line("└", "┴", "┘", "─"))
+
+    stats_lines = []
+    if summary.total_queries:
+        success_rate = summary.successful_queries / max(1, summary.total_queries)
+        stats_lines.append(
+            f"Success Rate: {success_rate:.1%} ({summary.successful_queries}/{summary.total_queries} queries)"
+        )
+
+    if summary.avg_execution_time_ms:
+        avg_seconds = summary.avg_execution_time_ms / 1000
+        stats_lines.append(f"Avg Execution Time: {avg_seconds:.2f}s")
+
+    if include_trials and summary.trial_statistics:
+        trial_stats = summary.trial_statistics
+        pass_at_1 = trial_stats.get("pass_at_1")
+        pass_at_k = trial_stats.get("pass_at_k")
+        stability = trial_stats.get("stability_score")
+        if pass_at_1 is not None:
+            stats_lines.append(f"Pass@1: {pass_at_1:.1%}")
+        if pass_at_k is not None:
+            stats_lines.append(f"Pass@k: {pass_at_k:.1%}")
+        if stability is not None:
+            stats_lines.append(f"Stability Score: {stability:.2f}")
+
+    if stats_lines:
+        lines.append("")
+        lines.extend(stats_lines)
+
+    return "\n".join(lines)
     console.print(header)
     console.print(
         Panel(

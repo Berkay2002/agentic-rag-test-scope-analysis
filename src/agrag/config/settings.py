@@ -27,9 +27,19 @@ class Settings(BaseSettings):
     langchain_project: str = "agrag-test-scope-analysis"
     langchain_endpoint: str = "https://api.smith.langchain.com"
 
+    # Ragas Configuration
+    ragas_model: str = "gemini-3-flash-preview"
+    ragas_max_retries: int = 3
+    ragas_enabled: bool = False
+
+    # LangSmith Experiments
+    langsmith_experiments_enabled: bool = False
+    langsmith_dataset_version: str = "v1"
+    langsmith_max_concurrency: int = 10
+
     # Google Generative AI
     google_api_key: Optional[str] = None
-    google_model: str = "gemini-3.0-flash-preview"
+    google_model: str = "gemini-3-flash-preview"
     google_embedding_model: str = "models/text-embedding-004"
     google_thinking_level: Optional[str] = None
     google_thinking_budget: Optional[int] = None
@@ -57,7 +67,7 @@ class Settings(BaseSettings):
     max_tool_calls: int = 10
     max_model_calls: int = 20
     max_iterations: int = 15
-    agent_temperature: float = 0.0
+    agent_temperature: float = 1.0
 
     # Retrieval Configuration
     default_retrieval_k: int = 10
@@ -124,8 +134,10 @@ class Settings(BaseSettings):
             return value
 
         normalized = value.lower()
-        if normalized not in {"low", "high"}:
-            raise ValueError("GOOGLE_THINKING_LEVEL must be either 'low' or 'high'")
+        if normalized not in {"low", "high", "medium", "minimal"}:
+            raise ValueError(
+                "GOOGLE_THINKING_LEVEL must be one of 'low', 'medium', 'high', or 'minimal'"
+            )
         return normalized
 
     @field_validator("google_thinking_budget")

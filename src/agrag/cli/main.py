@@ -352,6 +352,33 @@ def query(
     help="Retrieval strategy to evaluate (default: all)",
 )
 @click.option(
+    "--use-ragas",
+    is_flag=True,
+    help="Enable Ragas metrics (agent strategy only)",
+)
+@click.option(
+    "--use-langsmith",
+    is_flag=True,
+    help="Run evaluation as a LangSmith experiment (agent strategy only)",
+)
+@click.option(
+    "--num-trials",
+    default=1,
+    type=int,
+    help="Number of trials per query (agent strategy only)",
+)
+@click.option(
+    "--summary-only",
+    is_flag=True,
+    help="Output aggregate statistics only (agent strategy only)",
+)
+@click.option(
+    "--experiment-name",
+    type=str,
+    default=None,
+    help="LangSmith experiment name (agent strategy only)",
+)
+@click.option(
     "--verbose/--no-verbose",
     default=False,
     help="Show per-query metrics",
@@ -363,7 +390,17 @@ def query(
     help="Path to BM25 index file (default: data/bm25_index.pkl)",
 )
 def evaluate(
-    dataset: str, output: str, k_values: str, strategy: str, verbose: bool, bm25_index: str
+    dataset: str,
+    output: str,
+    k_values: str,
+    strategy: str,
+    use_ragas: bool,
+    use_langsmith: bool,
+    num_trials: int,
+    summary_only: bool,
+    experiment_name: Optional[str],
+    verbose: bool,
+    bm25_index: str,
 ):
     """Run evaluation on a dataset with actual retrieval.
 
@@ -410,6 +447,10 @@ def evaluate(
     from agrag.tools import VectorSearchTool, KeywordSearchTool, HybridSearchTool, GraphTraverseTool
     from agrag.storage import Neo4jClient, PostgresClient, BM25RetrieverManager
 
+    effective_use_ragas = use_ragas or settings.ragas_enabled
+    effective_use_langsmith = use_langsmith or settings.langsmith_experiments_enabled
+    num_trials = max(1, num_trials)
+
     click.echo(f"\nEvaluating dataset: {dataset}")
     click.echo(f"Strategy: {strategy}")
 
@@ -432,9 +473,63 @@ def evaluate(
 
         click.echo(f"Loaded {len(queries)} queries\n")
 
+        if effective_use_langsmith and strategy != "agent":
+            raise click.UsageError("--use-langsmith is only supported with --strategy agent")
+
+        if strategy != "agent" and (effective_use_ragas or num_trials > 1 or summary_only):
+            click.echo(
+                "Note: Ragas, trials, and summary-only options apply only to agent evaluation."
+            )
+
         # Handle agent strategy separately
+        if strategy == "agent" and effective_use_langsmith:
+            from agrag.evaluation import LangSmithEvaluator
+
+            dataset_name = Path(dataset).stem
+            evaluator = LangSmithEvaluator(
+                project_name=settings.langchain_project,
+                use_ragas=effective_use_ragas,
+                num_trials=num_trials,
+            )
+
+            dataset_name = evaluator.upload_eval_dataset(
+                dataset_name=dataset_name,
+                queries=queries,
+                description=f"AgRAG evaluation dataset ({dataset})",
+                version=settings.langsmith_dataset_version,
+            )
+
+            agent_function = _build_langsmith_agent_function()
+            result = evaluator.run_experiment(
+                dataset_name=dataset_name,
+                agent_function=agent_function,
+                experiment_name=experiment_name,
+                metadata={"strategy": "agent", "ragas": effective_use_ragas},
+                max_concurrency=settings.langsmith_max_concurrency,
+            )
+
+            if output:
+                with open(output, "w") as f:
+                    json.dump(result, f, indent=2)
+
+                click.echo(f"\n✓ Results saved to: {output}")
+
+            experiment_url = result.get("experiment_url")
+            if experiment_url:
+                click.echo(f"\nLangSmith Experiment: {experiment_url}")
+
+            return
+
         if strategy == "agent":
-            _run_agent_evaluation(queries, k_list, output, verbose)
+            _run_agent_evaluation(
+                queries=queries,
+                k_list=k_list,
+                output=output,
+                verbose=verbose,
+                use_ragas=effective_use_ragas,
+                num_trials=num_trials,
+                summary_only=summary_only,
+            )
             return
 
         # Initialize database clients
@@ -604,6 +699,125 @@ def evaluate(
         click.echo(f"\n✗ Evaluation failed: {e}", err=True)
         logger.exception("Evaluation failed")
         sys.exit(1)
+
+
+def _build_langsmith_agent_function():
+    from agrag.evaluation import create_evaluation_graph
+
+    graph = create_evaluation_graph()
+
+    def agent_function(inputs: dict) -> dict:
+        query_text = inputs.get("query", "")
+        initial_state = create_initial_state(query_text)
+        initial_state["retrieved_contexts"] = []
+        initial_state["enable_context_tracking"] = True
+
+        final_state = graph.invoke(initial_state)
+        messages = final_state.get("messages", [])
+        final_answer = ""
+
+        for msg in messages:
+            if getattr(msg, "type", None) == "ai" and not getattr(msg, "tool_calls", None):
+                if getattr(msg, "content", None):
+                    final_answer = extract_message_content(msg.content)
+
+        return {
+            "final_answer": final_answer,
+            "messages": messages,
+            "retrieved_contexts": final_state.get("retrieved_contexts", []),
+        }
+
+    return agent_function
+
+
+@cli.command()
+@click.option(
+    "--dataset",
+    required=True,
+    help="Evaluation dataset name or path",
+)
+@click.option("--name", help="Experiment name")
+@click.option("--num-trials", default=5, type=int, help="Trials per query")
+@click.option("--use-ragas", is_flag=True, help="Enable Ragas metrics")
+@click.option("--upload", is_flag=True, help="Upload dataset if not exists")
+@click.option("--compare-to", help="Compare to existing experiment")
+def experiment(
+    dataset: str,
+    name: Optional[str],
+    num_trials: int,
+    use_ragas: bool,
+    upload: bool,
+    compare_to: Optional[str],
+):
+    """Run LangSmith experiment with visualization."""
+    from agrag.evaluation import LangSmithEvaluator
+
+    effective_use_ragas = use_ragas or settings.ragas_enabled
+    num_trials = max(1, num_trials)
+
+    dataset_path = Path(dataset)
+    dataset_name = dataset_path.stem if dataset_path.exists() else dataset
+
+    queries = None
+    if dataset_path.exists():
+        with open(dataset_path, "r") as f:
+            data = json.load(f)
+
+        if isinstance(data, dict) and "queries" in data:
+            queries = data["queries"]
+        elif isinstance(data, list):
+            queries = data
+        else:
+            raise click.UsageError("Dataset must be a list or have a 'queries' key")
+
+        if not upload:
+            click.echo("Note: local dataset provided; uploading to LangSmith.")
+            upload = True
+
+    evaluator = LangSmithEvaluator(
+        project_name=settings.langchain_project,
+        use_ragas=effective_use_ragas,
+        num_trials=num_trials,
+    )
+
+    if upload:
+        if not queries:
+            raise click.UsageError("--upload requires a local dataset path")
+
+        dataset_name = evaluator.upload_eval_dataset(
+            dataset_name=dataset_name,
+            queries=queries,
+            description=f"AgRAG evaluation dataset ({dataset})",
+            version=settings.langsmith_dataset_version,
+        )
+
+    agent_function = _build_langsmith_agent_function()
+    result = evaluator.run_experiment(
+        dataset_name=dataset_name,
+        agent_function=agent_function,
+        experiment_name=name,
+        metadata={"strategy": "agent", "ragas": effective_use_ragas},
+        max_concurrency=settings.langsmith_max_concurrency,
+    )
+
+    if compare_to:
+        try:
+            comparison = evaluator.client.read_project(
+                project_name=compare_to,
+                include_stats=True,
+            )
+            result["comparison"] = {
+                "experiment": compare_to,
+                "stats": getattr(comparison, "dict", lambda: comparison)(),
+            }
+        except Exception as exc:
+            click.echo(f"Warning: failed to load comparison experiment: {exc}")
+
+    experiment_url = result.get("experiment_url")
+    if experiment_url:
+        click.echo(f"\nLangSmith Experiment: {experiment_url}")
+
+    click.echo(f"Dataset: {dataset_name}")
 
 
 def _execute_retrieval(
@@ -846,6 +1060,9 @@ def _run_agent_evaluation(
     k_list: list,
     output: str,
     verbose: bool,
+    use_ragas: bool,
+    num_trials: int,
+    summary_only: bool,
 ):
     """
     Run full agent evaluation on the dataset.
@@ -861,6 +1078,7 @@ def _run_agent_evaluation(
         verbose: Whether to show per-query progress
     """
     import json
+    from agrag.cli.display import format_summary_table
     from agrag.evaluation.agentic_evaluator import (
         AgenticEvaluator,
         create_evaluation_graph,
@@ -882,6 +1100,9 @@ def _run_agent_evaluation(
     evaluator = AgenticEvaluator(
         graph=graph,
         k_values=k_list,
+        use_ragas=use_ragas,
+        num_trials=num_trials,
+        enable_context_tracking=use_ragas,
     )
 
     # Run evaluation
@@ -897,46 +1118,74 @@ def _run_agent_evaluation(
     click.echo("AGENT EVALUATION RESULTS")
     click.echo("=" * 60)
 
-    click.echo("\n--- Aggregate Metrics ---")
-    click.echo(f"MAP: {summary.map_score:.4f}")
-    click.echo(f"MRR: {summary.mrr_score:.4f}")
+    if summary_only:
+        click.echo(
+            format_summary_table(
+                summary,
+                include_ragas=use_ragas,
+                include_trials=num_trials > 1,
+            )
+        )
+    else:
+        click.echo("\n--- Aggregate Metrics ---")
+        click.echo(f"MAP: {summary.map_score:.4f}")
+        click.echo(f"MRR: {summary.mrr_score:.4f}")
 
-    for k in k_list:
-        precision = summary.avg_precision_at_k.get(k, 0)
-        recall = summary.avg_recall_at_k.get(k, 0)
-        click.echo(f"Avg P@{k}: {precision:.4f}")
-        click.echo(f"Avg R@{k}: {recall:.4f}")
+        for k in k_list:
+            precision = summary.avg_precision_at_k.get(k, 0)
+            recall = summary.avg_recall_at_k.get(k, 0)
+            click.echo(f"Avg P@{k}: {precision:.4f}")
+            click.echo(f"Avg R@{k}: {recall:.4f}")
 
-    click.echo("\n--- Tool Usage Statistics ---")
-    click.echo(f"Total tool calls: {summary.total_tool_calls}")
-    click.echo(f"Avg tools per query: {summary.avg_tools_per_query:.2f}")
+        if use_ragas and summary.avg_ragas_metrics:
+            click.echo("\n--- Ragas Metrics ---")
+            for metric, value in summary.avg_ragas_metrics.items():
+                click.echo(f"{metric}: {value:.4f}")
 
-    if summary.tool_frequency:
-        click.echo("\nTool frequency:")
-        for tool, count in sorted(summary.tool_frequency.items(), key=lambda x: -x[1]):
-            pct = 100 * count / summary.total_queries
-            click.echo(f"  {tool}: {count} ({pct:.1f}%)")
+        if num_trials > 1 and summary.trial_statistics:
+            click.echo("\n--- Trial Statistics ---")
+            click.echo(f"Pass@1: {summary.trial_statistics.get('pass_at_1', 0):.1%}")
+            click.echo(f"Pass@k: {summary.trial_statistics.get('pass_at_k', 0):.1%}")
+            click.echo(
+                f"Stability score: {summary.trial_statistics.get('stability_score', 0):.2f}"
+            )
 
-    if summary.tool_combinations:
-        click.echo("\nTool combinations (top 5):")
-        sorted_combos = sorted(summary.tool_combinations.items(), key=lambda x: -x[1])[:5]
-        for combo, count in sorted_combos:
-            click.echo(f"  {combo}: {count}")
+        click.echo("\n--- Tool Usage Statistics ---")
+        click.echo(f"Total tool calls: {summary.total_tool_calls}")
+        click.echo(f"Avg tools per query: {summary.avg_tools_per_query:.2f}")
 
-    click.echo("\n--- Execution Statistics ---")
-    click.echo(f"Total queries: {summary.total_queries}")
-    click.echo(f"Successful queries: {summary.successful_queries}")
-    click.echo(f"Success rate: {summary.successful_queries / max(1, summary.total_queries):.1%}")
-    click.echo(f"Avg execution time: {summary.avg_execution_time_ms:.0f}ms")
+        if summary.tool_frequency:
+            click.echo("\nTool frequency:")
+            for tool, count in sorted(summary.tool_frequency.items(), key=lambda x: -x[1]):
+                pct = 100 * count / summary.total_queries
+                click.echo(f"  {tool}: {count} ({pct:.1f}%)")
+
+        if summary.tool_combinations:
+            click.echo("\nTool combinations (top 5):")
+            sorted_combos = sorted(summary.tool_combinations.items(), key=lambda x: -x[1])[:5]
+            for combo, count in sorted_combos:
+                click.echo(f"  {combo}: {count}")
+
+        click.echo("\n--- Execution Statistics ---")
+        click.echo(f"Total queries: {summary.total_queries}")
+        click.echo(f"Successful queries: {summary.successful_queries}")
+        click.echo(
+            f"Success rate: {summary.successful_queries / max(1, summary.total_queries):.1%}"
+        )
+        click.echo(f"Avg execution time: {summary.avg_execution_time_ms:.0f}ms")
 
     # Save results
+    summary_dict = summary.to_dict()
+    if summary_only:
+        summary_dict["per_query_results"] = []
+
     output_data = {
         "strategy": "agent",
         "dataset": output.replace("_results.json", ".json"),
         "queries_count": len(queries),
         "k_values": k_list,
         "results": {
-            "agent": summary.to_dict(),
+            "agent": summary_dict,
         },
     }
 
@@ -982,6 +1231,15 @@ def info():
     click.echo("\n[LangSmith]")
     click.echo(f"  Tracing: {settings.langchain_tracing_v2}")
     click.echo(f"  Project: {settings.langchain_project}")
+    click.echo(f"  Experiments: {settings.langsmith_experiments_enabled}")
+    click.echo(f"  Dataset version: {settings.langsmith_dataset_version}")
+    click.echo(f"  Max concurrency: {settings.langsmith_max_concurrency}")
+
+    # Ragas config
+    click.echo("\n[Ragas]")
+    click.echo(f"  Enabled: {settings.ragas_enabled}")
+    click.echo(f"  Model: {settings.ragas_model}")
+    click.echo(f"  Max retries: {settings.ragas_max_retries}")
 
     click.echo("")
 
