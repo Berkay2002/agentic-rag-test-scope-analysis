@@ -6,12 +6,7 @@ import logging
 
 from agrag.config import settings
 from agrag.storage.retry_decorators import resilient_db_operation
-from agrag.kg.ontology import (
-    NEO4J_CONSTRAINTS,
-    NEO4J_VECTOR_INDEXES,
-    NodeLabel,
-    RelationshipType,
-)
+from agrag.kg.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +38,7 @@ class Neo4jClient:
         if not self.uri or not self.password:
             raise ValueError("Neo4j URI and password must be provided")
 
+        self.registry = get_registry()
         self.driver: Driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
         logger.info(f"Neo4j client initialized for {self.uri}")
 
@@ -100,7 +96,7 @@ class Neo4jClient:
 
         with self.driver.session(database=self.database) as session:
             # Create constraints
-            for constraint_query in NEO4J_CONSTRAINTS:
+            for constraint_query in self.registry.neo4j_constraints():
                 try:
                     session.run(constraint_query)
                     logger.info(f"Created constraint: {constraint_query[:50]}...")
@@ -108,7 +104,7 @@ class Neo4jClient:
                     logger.warning(f"Constraint creation failed (may already exist): {e}")
 
             # Create vector indexes
-            for index_query in NEO4J_VECTOR_INDEXES:
+            for index_query in self.registry.neo4j_vector_indexes():
                 try:
                     session.run(index_query)
                     logger.info("Created vector index")
@@ -120,7 +116,7 @@ class Neo4jClient:
     @resilient_db_operation
     def create_node(
         self,
-        label: NodeLabel,
+        label: str,
         properties: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
@@ -133,8 +129,9 @@ class Neo4jClient:
         Returns:
             Created node properties
         """
+        label_value = self._normalize_label(label)
         query = f"""
-        CREATE (n:{label.value})
+        CREATE (n:{label_value})
         SET n = $properties
         RETURN n
         """
@@ -148,10 +145,10 @@ class Neo4jClient:
     def create_relationship(
         self,
         source_id: str,
-        source_label: NodeLabel,
+        source_label: str,
         target_id: str,
-        target_label: NodeLabel,
-        relationship_type: RelationshipType,
+        target_label: str,
+        relationship_type: str,
         properties: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -169,10 +166,13 @@ class Neo4jClient:
             Relationship information
         """
         props = properties or {}
+        source_label_value = self._normalize_label(source_label)
+        target_label_value = self._normalize_label(target_label)
+        rel_value = self._normalize_relationship(relationship_type)
         query = f"""
-        MATCH (source:{source_label.value} {{id: $source_id}})
-        MATCH (target:{target_label.value} {{id: $target_id}})
-        CREATE (source)-[r:{relationship_type.value}]->(target)
+        MATCH (source:{source_label_value} {{id: $source_id}})
+        MATCH (target:{target_label_value} {{id: $target_id}})
+        CREATE (source)-[r:{rel_value}]->(target)
         SET r = $properties
         RETURN r, source.id AS source_id, target.id AS target_id
         """
@@ -189,7 +189,7 @@ class Neo4jClient:
                 return {
                     "source_id": record["source_id"],
                     "target_id": record["target_id"],
-                    "type": relationship_type.value,
+                    "type": rel_value,
                     "properties": dict(record["r"]),
                 }
             return {}
@@ -198,7 +198,7 @@ class Neo4jClient:
     def vector_search(
         self,
         query_embedding: List[float],
-        node_label: NodeLabel,
+        node_label: str,
         k: int = 10,
         similarity_threshold: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
@@ -214,7 +214,8 @@ class Neo4jClient:
         Returns:
             List of similar nodes with scores
         """
-        index_name = f"{node_label.value.lower()}_embeddings"
+        label_value = self._normalize_label(node_label)
+        index_name = self.registry.neo4j_vector_index_name(label_value)
 
         query = """
         CALL db.index.vector.queryNodes($index_name, $k, $query_embedding)
@@ -243,7 +244,7 @@ class Neo4jClient:
                         "node": node_data,
                         "score": record["score"],
                         "id": node_data.get("id"),
-                        "label": node_label.value,
+                        "label": label_value,
                     }
                 )
 
@@ -253,8 +254,8 @@ class Neo4jClient:
     def graph_traverse(
         self,
         start_node_id: str,
-        start_node_label: NodeLabel,
-        relationship_types: Optional[List[RelationshipType]] = None,
+        start_node_label: str,
+        relationship_types: Optional[List[str]] = None,
         depth: int = 2,
         direction: str = "outgoing",  # "outgoing", "incoming", "both"
     ) -> List[Dict[str, Any]]:
@@ -271,9 +272,10 @@ class Neo4jClient:
         Returns:
             List of paths with nodes and relationships
         """
+        start_label_value = self._normalize_label(start_node_label)
         # Build relationship pattern with quantifier
         if relationship_types:
-            rel_types = "|".join([rt.value for rt in relationship_types])
+            rel_types = "|".join([self._normalize_relationship(rt) for rt in relationship_types])
             rel_pattern = f":{rel_types}"
         else:
             rel_pattern = ""
@@ -290,7 +292,7 @@ class Neo4jClient:
             pattern = f"-[{rel_pattern}*1..{depth}]-"
 
         query = f"""
-        MATCH path = (start:{start_node_label.value} {{id: $start_id}})
+        MATCH path = (start:{start_label_value} {{id: $start_id}})
                      {pattern}
                      (end)
         RETURN path,
@@ -345,7 +347,7 @@ class Neo4jClient:
     def get_node_by_id(
         self,
         node_id: str,
-        label: Optional[NodeLabel] = None,
+        label: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Retrieve a node by its ID.
@@ -358,7 +360,8 @@ class Neo4jClient:
             Node properties or None if not found
         """
         if label:
-            query = f"MATCH (n:{label.value} {{id: $node_id}}) RETURN n"
+            label_value = self._normalize_label(label)
+            query = f"MATCH (n:{label_value} {{id: $node_id}}) RETURN n"
         else:
             query = "MATCH (n {id: $node_id}) RETURN n, labels(n) AS labels"
 
@@ -373,6 +376,22 @@ class Neo4jClient:
                 return node_data
 
             return None
+
+    def _normalize_label(self, label: Any) -> str:
+        if hasattr(label, "value"):
+            label = label.value
+        normalized = self.registry.normalize_label(str(label))
+        if not normalized:
+            raise ValueError(f"Unknown node label: {label}")
+        return normalized
+
+    def _normalize_relationship(self, relationship: Any) -> str:
+        if hasattr(relationship, "value"):
+            relationship = relationship.value
+        normalized = self.registry.normalize_relationship(str(relationship))
+        if not normalized:
+            raise ValueError(f"Unknown relationship type: {relationship}")
+        return normalized
 
     def delete_all(self) -> int:
         """

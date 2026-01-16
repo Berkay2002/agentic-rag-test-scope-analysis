@@ -18,7 +18,7 @@ from agrag.tools.schemas import (
 )
 from agrag.tools.base import BaseToolWrapper
 from agrag.storage import Neo4jClient
-from agrag.kg.ontology import NodeLabel, RelationshipType
+from agrag.kg.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -184,8 +184,8 @@ def create_graph_traverse_tool(neo4j_client: Optional[Neo4jClient] = None):
     @tool("graph_traverse", args_schema=GraphTraverseInput)
     def graph_traverse(
         start_node_id: str,
-        start_node_label: NodeLabel,
-        relationship_types: Optional[List[RelationshipType]] = None,
+        start_node_label: str,
+        relationship_types: Optional[List[str]] = None,
         depth: int = 2,
         direction: str = "outgoing",
     ) -> str:
@@ -214,10 +214,24 @@ def create_graph_traverse_tool(neo4j_client: Optional[Neo4jClient] = None):
                 f"Performing graph traversal from {start_node_id} "
                 f"(depth={depth}, direction={direction})"
             )
+            registry = get_registry()
+            normalized_label = registry.normalize_label(start_node_label)
+            if not normalized_label:
+                return f"Error: Unknown start_node_label '{start_node_label}'"
+
+            normalized_relationships = None
+            if relationship_types:
+                normalized_relationships = []
+                for rel in relationship_types:
+                    rel_norm = registry.normalize_relationship(rel)
+                    if not rel_norm:
+                        return f"Error: Unknown relationship type '{rel}'"
+                    normalized_relationships.append(rel_norm)
+
             results = client.graph_traverse(
                 start_node_id=start_node_id,
-                start_node_label=start_node_label,
-                relationship_types=relationship_types,
+                start_node_label=normalized_label,
+                relationship_types=normalized_relationships,
                 depth=depth,
                 direction=direction,
             )

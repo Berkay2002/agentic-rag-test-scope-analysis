@@ -11,7 +11,7 @@ import logging
 
 from agrag.config import settings
 from agrag.storage.retry_decorators import resilient_db_operation
-from agrag.kg.ontology import POSTGRESQL_SCHEMA
+from agrag.kg.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +112,12 @@ class PostgresClient:
         if self.conn is None:
             raise RuntimeError("Failed to establish database connection")
 
+        registry = get_registry()
+        schema_sql = registry.postgres_schema()
+
         with self.conn.cursor() as cur:
             # Execute schema SQL (this will create the vector extension)
-            cur.execute(POSTGRESQL_SCHEMA)
+            cur.execute(schema_sql)
             self.conn.commit()
 
         # Now register vector types

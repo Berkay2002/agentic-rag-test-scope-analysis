@@ -1,9 +1,9 @@
 """Pydantic schemas for retrieval tool inputs and outputs."""
 
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from agrag.kg.ontology import NodeLabel, RelationshipType
+from agrag.kg.registry import get_registry
 
 
 # Input Schemas for Tools
@@ -27,7 +27,7 @@ class VectorSearchInput(BaseModel):
         le=50,
         description="Number of results to return (1-50)",
     )
-    node_type: Optional[NodeLabel] = Field(
+    node_type: Optional[str] = Field(
         default=None,
         description="Optional node type filter (e.g., TestCase, Requirement, Function). If omitted, searches all.",
     )
@@ -71,6 +71,17 @@ class VectorSearchInput(BaseModel):
         le=10,
         description="Maximum number of query variants to generate"
     )
+
+    @field_validator("node_type")
+    @classmethod
+    def validate_node_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        registry = get_registry()
+        normalized = registry.normalize_label(value)
+        if not normalized:
+            raise ValueError(f"Unknown node type: {value}")
+        return normalized
 
 
 class KeywordSearchInput(BaseModel):
@@ -126,6 +137,17 @@ class KeywordSearchInput(BaseModel):
         description="Maximum number of query variants to generate"
     )
 
+    @field_validator("entity_type")
+    @classmethod
+    def validate_entity_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        registry = get_registry()
+        normalized = registry.normalize_label(value)
+        if not normalized:
+            raise ValueError(f"Unknown entity type: {value}")
+        return normalized
+
 
 class GraphTraverseInput(BaseModel):
     """Input schema for graph traversal tool."""
@@ -142,11 +164,11 @@ class GraphTraverseInput(BaseModel):
             "COMP_NETWORK",
         ],
     )
-    start_node_label: NodeLabel = Field(
+    start_node_label: str = Field(
         ...,
         description="Label of the starting node",
     )
-    relationship_types: Optional[List[RelationshipType]] = Field(
+    relationship_types: Optional[List[str]] = Field(
         default=None,
         description="Optional list of relationship types to follow. If None, follows all relationships.",
     )
@@ -161,6 +183,29 @@ class GraphTraverseInput(BaseModel):
         description="Traversal direction: 'outgoing', 'incoming', or 'both'",
         pattern="^(outgoing|incoming|both)$",
     )
+
+    @field_validator("start_node_label")
+    @classmethod
+    def validate_start_node_label(cls, value: str) -> str:
+        registry = get_registry()
+        normalized = registry.normalize_label(value)
+        if not normalized:
+            raise ValueError(f"Unknown node label: {value}")
+        return normalized
+
+    @field_validator("relationship_types")
+    @classmethod
+    def validate_relationship_types(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        if value is None:
+            return value
+        registry = get_registry()
+        normalized = []
+        for rel in value:
+            rel_norm = registry.normalize_relationship(rel)
+            if not rel_norm:
+                raise ValueError(f"Unknown relationship type: {rel}")
+            normalized.append(rel_norm)
+        return normalized
 
 
 class HybridSearchInput(BaseModel):
@@ -225,6 +270,17 @@ class HybridSearchInput(BaseModel):
         le=10,
         description="Maximum number of query variants to generate"
     )
+
+    @field_validator("entity_type")
+    @classmethod
+    def validate_hybrid_entity_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        registry = get_registry()
+        normalized = registry.normalize_label(value)
+        if not normalized:
+            raise ValueError(f"Unknown entity type: {value}")
+        return normalized
 
 
 # Output Schemas

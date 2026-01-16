@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     retry_max_attempts: int = 3
     retry_base_delay: float = 1.0  # seconds
 
+    # Ontology configuration
+    ontology_spec_path: Optional[str] = None
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "json"  # "json" or "text"

@@ -1,0 +1,68 @@
+{
+  "name": "default_telecom_kg",
+  "schema_version": "synthetic-v1",
+  "labels": [
+    "ChangeRequest",
+    "File",
+    "Component",
+    "Requirement",
+    "TestCase",
+    "Function",
+    "Class",
+    "Module"
+  ],
+  "relationship_types": [
+    "TOUCHES",
+    "PART_OF",
+    "VERIFIES",
+    "COVERS",
+    "CALLS",
+    "DEFINED_IN",
+    "INHERITS_FROM",
+    "BELONGS_TO",
+    "DEPENDS_ON"
+  ],
+  "id_patterns": {
+    "ChangeRequest": "^CR_[A-Z]+_\\d+$",
+    "File": "^FILE_[A-Za-z0-9_]+$",
+    "Component": "^COMP_[A-Za-z0-9_]+$",
+    "Requirement": "^REQ_[A-Z]+_\\d+$",
+    "TestCase": "^TC_[A-Z]+_\\d+$",
+    "Function": "^FUNC_[A-Za-z_]+$",
+    "Class": "^CLASS_[A-Za-z_]+$",
+    "Module": "^MOD_[A-Za-z_.]+$"
+  },
+  "label_aliases": {},
+  "relationship_aliases": {},
+  "neo4j": {
+    "constraints": [
+      "CREATE CONSTRAINT changerequest_id IF NOT EXISTS FOR (c:ChangeRequest) REQUIRE c.id IS UNIQUE",
+      "CREATE CONSTRAINT file_id IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
+      "CREATE CONSTRAINT component_id IF NOT EXISTS FOR (c:Component) REQUIRE c.id IS UNIQUE",
+      "CREATE CONSTRAINT requirement_id IF NOT EXISTS FOR (r:Requirement) REQUIRE r.id IS UNIQUE",
+      "CREATE CONSTRAINT testcase_id IF NOT EXISTS FOR (t:TestCase) REQUIRE t.id IS UNIQUE",
+      "CREATE CONSTRAINT function_id IF NOT EXISTS FOR (f:Function) REQUIRE f.id IS UNIQUE",
+      "CREATE CONSTRAINT class_id IF NOT EXISTS FOR (c:Class) REQUIRE c.id IS UNIQUE",
+      "CREATE CONSTRAINT module_id IF NOT EXISTS FOR (m:Module) REQUIRE m.id IS UNIQUE"
+    ],
+    "vector_indexes": [
+      "CREATE VECTOR INDEX change_request_embeddings IF NOT EXISTS\n    FOR (c:ChangeRequest) ON (c.embedding)\n    OPTIONS {indexConfig: {\n        `vector.dimensions`: 768,\n        `vector.similarity_function`: 'cosine'\n    }}",
+      "CREATE VECTOR INDEX file_embeddings IF NOT EXISTS\n    FOR (f:File) ON (f.embedding)\n    OPTIONS {indexConfig: {\n        `vector.dimensions`: 768,\n        `vector.similarity_function`: 'cosine'\n    }}",
+      "CREATE VECTOR INDEX component_embeddings IF NOT EXISTS\n    FOR (c:Component) ON (c.embedding)\n    OPTIONS {indexConfig: {\n        `vector.dimensions`: 768,\n        `vector.similarity_function`: 'cosine'\n    }}",
+      "CREATE VECTOR INDEX requirement_embeddings IF NOT EXISTS\n    FOR (r:Requirement) ON (r.embedding)\n    OPTIONS {indexConfig: {\n        `vector.dimensions`: 768,\n        `vector.similarity_function`: 'cosine'\n    }}",
+      "CREATE VECTOR INDEX testcase_embeddings IF NOT EXISTS\n    FOR (t:TestCase) ON (t.embedding)\n    OPTIONS {indexConfig: {\n        `vector.dimensions`: 768,\n        `vector.similarity_function`: 'cosine'\n    }}",
+      "CREATE VECTOR INDEX function_embeddings IF NOT EXISTS\n    FOR (f:Function) ON (f.embedding)\n    OPTIONS {indexConfig: {\n        `vector.dimensions`: 768,\n        `vector.similarity_function`: 'cosine'\n    }}"
+    ],
+    "vector_index_names": {
+      "ChangeRequest": "change_request_embeddings",
+      "File": "file_embeddings",
+      "Component": "component_embeddings",
+      "Requirement": "requirement_embeddings",
+      "TestCase": "testcase_embeddings",
+      "Function": "function_embeddings"
+    }
+  },
+  "postgres": {
+    "schema_sql": "-- Enable pgvector extension for vector similarity search\nCREATE EXTENSION IF NOT EXISTS vector;\n\n-- Enable pg_search extension for true BM25 full-text search\nCREATE EXTENSION IF NOT EXISTS pg_search;\n\n-- Document chunks table for vector and keyword search\nCREATE TABLE IF NOT EXISTS document_chunks (\n    id SERIAL PRIMARY KEY,\n    chunk_id VARCHAR(255) UNIQUE NOT NULL,\n    content TEXT NOT NULL,\n    metadata JSONB,\n    embedding vector(768),\n    created_at TIMESTAMP DEFAULT NOW(),\n    updated_at TIMESTAMP DEFAULT NOW()\n);\n\n-- Vector similarity index (HNSW via pgvector)\nCREATE INDEX IF NOT EXISTS document_chunks_embedding_idx\nON document_chunks USING hnsw (embedding vector_cosine_ops);\n\n-- BM25 full-text search index (via pg_search/ParadeDB)\n-- This provides true BM25 ranking, not TF-IDF like ts_rank_cd\nCREATE INDEX IF NOT EXISTS document_chunks_bm25_idx\nON document_chunks USING bm25 (id, chunk_id, content, metadata)\nWITH (key_field = 'id');\n\n-- Metadata GIN index for filtering\nCREATE INDEX IF NOT EXISTS document_chunks_metadata_idx\nON document_chunks USING gin(metadata);\n\n-- Entity type index for filtering\nCREATE INDEX IF NOT EXISTS document_chunks_entity_type_idx\nON document_chunks ((metadata->>'entity_type'));"
+  }
+}

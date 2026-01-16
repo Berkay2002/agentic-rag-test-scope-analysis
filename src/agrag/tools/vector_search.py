@@ -23,7 +23,7 @@ from agrag.tools.diversification import (
 from agrag.tools.search_utils import extract_signal_tokens
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
-from agrag.kg.ontology import NodeLabel
+from agrag.kg.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def _ensure_signal_match_in_top_k(
     query: str,
     client,
     k: int,
-    node_type: Optional[NodeLabel],
+    node_type: Optional[str],
 ) -> list[SearchResult]:
     """Ensure top-k includes at least one signal-token match via keyword fallback."""
     signal_tokens = extract_signal_tokens(query)
@@ -142,7 +142,7 @@ def _ensure_signal_match_in_top_k(
     if any(has_all_tokens(result) for result in results[:k]):
         return results
 
-    metadata_filter = {"entity_type": node_type.value} if node_type else None
+    metadata_filter = {"entity_type": node_type} if node_type else None
     try:
         keyword_raw = client.keyword_search(
             query=query,
@@ -214,7 +214,7 @@ def _execute_multi_query_search(
     client,
     embedding_service,
     k: int,
-    node_type: Optional[NodeLabel],
+    node_type: Optional[str],
     similarity_threshold: Optional[float]
 ) -> list:
     """Execute search for multiple query variants and merge results.
@@ -236,7 +236,7 @@ def _execute_multi_query_search(
     # Build metadata filter if node_type provided
     metadata_filter = None
     if node_type:
-        metadata_filter = {"entity_type": node_type.value}
+        metadata_filter = {"entity_type": node_type}
 
     # Execute search for each query variant
     for query in queries:
@@ -298,7 +298,7 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
     def vector_search(
         query: str,
         k: int = 10,
-        node_type: Optional[NodeLabel] = None,
+        node_type: Optional[str] = None,
         similarity_threshold: Optional[float] = None,
         enable_diversification: bool = False,
         diversification_method: str = "mmr",
@@ -354,7 +354,7 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
 def _vector_search_core(
     query: str,
     k: int,
-    node_type: Optional[NodeLabel],
+    node_type: Optional[str],
     similarity_threshold: Optional[float],
     enable_diversification: bool,
     diversification_method: str,
@@ -396,6 +396,12 @@ def _vector_search_core(
         return "Error: PostgreSQL client not initialized"
 
     try:
+        registry = get_registry()
+        if node_type:
+            original_node_type = node_type
+            node_type = registry.normalize_label(node_type)
+            if not node_type:
+                return f"Error: Unknown node type '{original_node_type}'"
         # Expand query if enabled
         expanded_queries = _expand_queries(
             query=query,
@@ -414,7 +420,7 @@ def _vector_search_core(
             # Build metadata filter if node_type provided
             metadata_filter = None
             if node_type:
-                metadata_filter = {"entity_type": node_type.value}
+                metadata_filter = {"entity_type": node_type}
 
             # Perform vector search in PostgreSQL using pgvector
             logger.info(f"Performing pgvector search (entity_type={node_type})")

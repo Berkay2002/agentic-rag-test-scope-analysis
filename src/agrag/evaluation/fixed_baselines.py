@@ -1,6 +1,6 @@
 from typing import List
 
-from agrag.kg.ontology import NodeLabel, RelationshipType
+from agrag.kg.registry import get_registry
 
 
 def _invoke_tool(tool, **kwargs) -> str:
@@ -11,46 +11,24 @@ def _invoke_tool(tool, **kwargs) -> str:
     raise TypeError("Tool does not support invoke or _run")
 
 
-def _infer_label_from_id(entity_id: str) -> NodeLabel:
-    if entity_id.startswith("CR_"):
-        return NodeLabel.CHANGE_REQUEST
-    if entity_id.startswith("FILE_"):
-        return NodeLabel.FILE
-    if entity_id.startswith("COMP_"):
-        return NodeLabel.COMPONENT
-    if entity_id.startswith("REQ_"):
-        return NodeLabel.REQUIREMENT
-    if entity_id.startswith("TC_"):
-        return NodeLabel.TEST_CASE
-    return NodeLabel.FUNCTION
+def _infer_label_from_id(entity_id: str) -> str:
+    registry = get_registry()
+    inferred = registry.infer_entity_type(entity_id)
+    return inferred or "Function"
 
 
 def _infer_entity_type_from_id(entity_id: str) -> str | None:
-    if entity_id.startswith("CR_"):
-        return NodeLabel.CHANGE_REQUEST.value
-    if entity_id.startswith("FILE_"):
-        return NodeLabel.FILE.value
-    if entity_id.startswith("COMP_"):
-        return NodeLabel.COMPONENT.value
-    if entity_id.startswith("REQ_"):
-        return NodeLabel.REQUIREMENT.value
-    if entity_id.startswith("TC_"):
-        return NodeLabel.TEST_CASE.value
-    if entity_id.startswith("FUNC_"):
-        return NodeLabel.FUNCTION.value
-    if entity_id.startswith("CLASS_"):
-        return NodeLabel.CLASS.value
-    if entity_id.startswith("MOD_"):
-        return NodeLabel.MODULE.value
-    return None
+    registry = get_registry()
+    return registry.infer_entity_type(entity_id)
 
 
 def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
     from agrag.cli.main import _parse_result_ids
     from agrag.config.settings import settings
 
+    registry = get_registry()
     inferred_type = _infer_entity_type_from_id(query)
-    entity_type = inferred_type or NodeLabel.TEST_CASE.value
+    entity_type = inferred_type or (registry.normalize_label("TestCase") or "TestCase")
     kwargs = {"query": query, "k": k}
     if entity_type:
         kwargs["entity_type"] = entity_type
@@ -73,6 +51,7 @@ def run_fixed_graphrag(query: str, hybrid_tool, graph_tool, k: int = 10) -> List
 
     seed_ids = run_fixed_rag(query=query, hybrid_tool=hybrid_tool, k=k)
     graph_ids: List[str] = []
+    registry = get_registry()
     for entity_id in seed_ids[:3]:
         label = _infer_label_from_id(entity_id)
         graph_result = _invoke_tool(
@@ -80,11 +59,15 @@ def run_fixed_graphrag(query: str, hybrid_tool, graph_tool, k: int = 10) -> List
             start_node_id=entity_id,
             start_node_label=label,
             relationship_types=[
-                RelationshipType.TOUCHES,
-                RelationshipType.DEFINED_IN,
-                RelationshipType.COVERS,
-                RelationshipType.VERIFIES,
-                RelationshipType.PART_OF,
+                r
+                for r in [
+                    registry.normalize_relationship("TOUCHES"),
+                    registry.normalize_relationship("DEFINED_IN"),
+                    registry.normalize_relationship("COVERS"),
+                    registry.normalize_relationship("VERIFIES"),
+                    registry.normalize_relationship("PART_OF"),
+                ]
+                if r
             ],
             depth=3,
             direction="both",

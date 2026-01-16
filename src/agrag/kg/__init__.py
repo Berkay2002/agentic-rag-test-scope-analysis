@@ -28,6 +28,8 @@ from .ontology import (
     NEO4J_VECTOR_INDEXES,
     POSTGRESQL_SCHEMA,
 )
+from .registry import OntologyRegistry, get_registry, reload_registry
+from .adapter import SourceAdapter
 
 __all__ = [
     "Priority",
@@ -52,4 +54,8 @@ __all__ = [
     "NEO4J_CONSTRAINTS",
     "NEO4J_VECTOR_INDEXES",
     "POSTGRESQL_SCHEMA",
+    "OntologyRegistry",
+    "get_registry",
+    "reload_registry",
+    "SourceAdapter",
 ]

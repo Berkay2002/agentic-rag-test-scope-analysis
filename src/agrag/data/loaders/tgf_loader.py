@@ -11,7 +11,8 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from agrag.data.loaders.base import BaseLoader, Document
-from agrag.kg.ontology import TestType, NodeLabel, RelationshipType
+from agrag.kg.ontology import TestType
+from agrag.kg.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -233,9 +234,11 @@ class TGFCSVLoader(BaseLoader):
             content = "\n".join(content_parts)
 
             # Document metadata includes entity data + relationships
+            registry = get_registry()
+            test_case_label = registry.normalize_label("TestCase") or "TestCase"
             metadata = {
                 "chunk_id": f"test_{record.test_id}",
-                "entity_type": NodeLabel.TEST_CASE.value,
+                "entity_type": test_case_label,
                 "entity": test_entity,
                 "relationships": self._extract_relationships(record),
             }
@@ -253,13 +256,18 @@ class TGFCSVLoader(BaseLoader):
             List of relationship dicts with type, target node, and properties
         """
         relationships = []
+        registry = get_registry()
+        verifies_type = registry.normalize_relationship("VERIFIES") or "VERIFIES"
+        covers_type = registry.normalize_relationship("COVERS") or "COVERS"
+        requirement_label = registry.normalize_label("Requirement") or "Requirement"
+        function_label = registry.normalize_label("Function") or "Function"
 
         # TestCase -[:VERIFIES]-> Requirement
         for req_id in record.requirement_ids:
             relationships.append(
                 {
-                    "type": RelationshipType.VERIFIES.value,
-                    "target_label": NodeLabel.REQUIREMENT.value,
+                    "type": verifies_type,
+                    "target_label": requirement_label,
                     "target_id": req_id,
                     "properties": {
                         "verified_at": record.timestamp,
@@ -273,8 +281,8 @@ class TGFCSVLoader(BaseLoader):
             func_id = f"FUNC_{func_name}"
             relationships.append(
                 {
-                    "type": RelationshipType.COVERS.value,
-                    "target_label": NodeLabel.FUNCTION.value,
+                    "type": covers_type,
+                    "target_label": function_label,
                     "target_id": func_id,
                     "properties": {
                         "coverage_pct": record.code_coverage_pct,

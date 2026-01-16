@@ -12,7 +12,8 @@ from agrag.storage.postgres_client import PostgresClient
 from agrag.storage.bm25_retriever import BM25RetrieverManager
 from agrag.data.storage_writers import PostgresWriter, BM25Writer
 from agrag.models.embeddings import get_embedding_service
-from agrag.kg.ontology import RelationshipType
+from agrag.kg.adapter import SourceAdapter
+from agrag.kg.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -23,37 +24,47 @@ BM25_INDEX_PATH = "data/bm25_index.pkl"
 class DataIngestion:
     """Load data into Neo4j and PostgreSQL."""
 
-    def __init__(self, bm25_index_path: str = BM25_INDEX_PATH):
+    def __init__(
+        self,
+        bm25_index_path: str = BM25_INDEX_PATH,
+        source_system: str = "synthetic",
+        schema_version: Optional[str] = None,
+        adapter: Optional[SourceAdapter] = None,
+    ):
         """Initialize ingestion pipeline with database clients.
 
         Args:
             bm25_index_path: Path to persist BM25 index for keyword search
+            source_system: Source system name for provenance tracking
+            schema_version: Schema version for provenance tracking
+            adapter: Optional source adapter for entity/relationship normalization
         """
         self.neo4j_client = Neo4jClient()
         self.postgres_client = PostgresClient()
         self.bm25_manager = BM25RetrieverManager(k=10)
         self.bm25_index_path = bm25_index_path
+        self.registry = get_registry()
+        self.adapter = adapter or SourceAdapter(
+            registry=self.registry,
+            source_system=source_system,
+            schema_version=schema_version,
+        )
         logger.info("Data ingestion pipeline initialized")
 
     @staticmethod
     def _infer_entity_type(entity_id: str) -> Optional[str]:
-        if entity_id.startswith("CR_"):
-            return "ChangeRequest"
-        if entity_id.startswith("FILE_"):
-            return "File"
-        if entity_id.startswith("COMP_"):
-            return "Component"
-        if entity_id.startswith("REQ_"):
-            return "Requirement"
-        if entity_id.startswith("TC_"):
-            return "TestCase"
-        if entity_id.startswith("FUNC_"):
-            return "Function"
-        if entity_id.startswith("CLASS_"):
-            return "Class"
-        if entity_id.startswith("MOD_"):
-            return "Module"
-        return None
+        registry = get_registry()
+        return registry.infer_entity_type(entity_id)
+
+    def _apply_provenance(self, entity: Dict[str, Any]) -> Dict[str, Any]:
+        enriched = dict(entity)
+        enriched.setdefault("source_system", self.adapter.source_system)
+        enriched.setdefault("schema_version", self.adapter.schema_version)
+        enriched.setdefault("raw_type", entity.get("raw_type") or entity.get("entity_type"))
+        return enriched
+
+    def _apply_provenance_batch(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [self._apply_provenance(entity) for entity in entities]
 
     def ingest_entities_neo4j(
         self, entities: List[Dict[str, Any]], entity_type: str, batch_size: int = 100
@@ -77,7 +88,7 @@ class DataIngestion:
         # Prepare entities for Neo4j - keep embeddings for vector search
         neo4j_entities = []
         for entity in entities:
-            entity_copy = entity.copy()
+            entity_copy = self._apply_provenance(entity)
             # Convert metadata dict to JSON string for Neo4j
             if "metadata" in entity_copy and isinstance(entity_copy["metadata"], dict):
                 import json
@@ -160,6 +171,16 @@ class DataIngestion:
                 if key in entity:
                     metadata[key] = str(entity[key])
 
+            for key in ["source_system", "schema_version", "raw_type"]:
+                if key in entity and entity[key] is not None:
+                    metadata[key] = str(entity[key])
+                elif key == "source_system":
+                    metadata[key] = self.adapter.source_system
+                elif key == "schema_version":
+                    metadata[key] = self.adapter.schema_version
+                elif key == "raw_type":
+                    metadata[key] = entity.get("raw_type") or entity_type
+
             # Insert into PostgreSQL
             chunk_id = f"{entity_type}_{entity['id']}"
             self.postgres_client.insert_document_chunk(
@@ -199,21 +220,27 @@ class DataIngestion:
 
         # Process each relationship type in batches
         for rel_type, type_rels in rels_by_type.items():
-            try:
-                rel_type_enum = RelationshipType(rel_type)
-            except ValueError:
+            if not self.registry.validate_relationship(rel_type):
                 logger.warning("Skipping unknown relationship type: %s", rel_type)
                 continue
 
             for i in range(0, len(type_rels), batch_size):
                 batch = type_rels[i : i + batch_size]
+                for rel in batch:
+                    props = rel.get("properties")
+                    if not isinstance(props, dict):
+                        props = {}
+                    props.setdefault("source_system", self.adapter.source_system)
+                    props.setdefault("schema_version", self.adapter.schema_version)
+                    props.setdefault("raw_type", rel.get("raw_type") or rel_type)
+                    rel["properties"] = props
 
                 # Create Cypher query for batch insert of single relationship type
                 query = f"""
                 UNWIND $batch AS rel
                 MATCH (source {{id: rel.source_id}})
                 MATCH (target {{id: rel.target_id}})
-                MERGE (source)-[r:{rel_type_enum.value}]->(target)
+                MERGE (source)-[r:{rel_type}]->(target)
                 SET r += rel.properties
                 RETURN count(r) as count
                 """
@@ -230,7 +257,7 @@ class DataIngestion:
                             single_query = f"""
                             MATCH (source {{id: $source_id}})
                             MATCH (target {{id: $target_id}})
-                            MERGE (source)-[r:{rel_type_enum.value}]->(target)
+                            MERGE (source)-[r:{rel_type}]->(target)
                             SET r += $properties
                             RETURN r
                             """
@@ -245,7 +272,7 @@ class DataIngestion:
                             total_inserted += 1
                         except Exception as inner_e:
                             logger.warning(
-                                f"Failed to insert relationship {rel['source_id']}-[{rel_type_enum.value}]->{rel['target_id']}: {inner_e}"
+                                f"Failed to insert relationship {rel['source_id']}-[{rel_type}]->{rel['target_id']}: {inner_e}"
                             )
 
         logger.info(f"Inserted {total_inserted} relationships into Neo4j")
@@ -266,18 +293,26 @@ class DataIngestion:
         entities = dataset.get("entities", [])
         relationships = dataset.get("relationships", [])
 
-        # Group entities by type
-        entities_by_type = {}
+        # Group entities by type using adapter normalization
+        entities_by_type: Dict[str, List[Dict[str, Any]]] = {}
+        normalized_entities: List[Dict[str, Any]] = []
         for entity in entities:
-            # Determine entity type from ID prefix or other fields
-            entity_type = self._infer_entity_type(entity["id"])
-            if not entity_type:
-                logger.warning(f"Unknown entity type for ID: {entity['id']}")
+            try:
+                normalized_entity, entity_type = self.adapter.normalize_entity(entity)
+            except Exception as exc:
+                logger.warning("Unknown entity type for ID %s: %s", entity.get("id"), exc)
                 continue
 
-            if entity_type not in entities_by_type:
-                entities_by_type[entity_type] = []
-            entities_by_type[entity_type].append(entity)
+            entities_by_type.setdefault(entity_type, []).append(normalized_entity)
+            normalized_entities.append(normalized_entity)
+
+        normalized_relationships: List[Dict[str, Any]] = []
+        for rel in relationships:
+            try:
+                normalized_relationships.append(self.adapter.normalize_relationship(rel))
+            except Exception as exc:
+                logger.warning("Skipping relationship due to normalization error: %s", exc)
+                continue
 
         # Use rich progress bar
         with Progress(
@@ -292,7 +327,7 @@ class DataIngestion:
             postgres_counts = {}
             bm25_count = 0
 
-            total_entities = len(entities)
+            total_entities = len(normalized_entities)
             entity_task = progress.add_task("[cyan]Ingesting entities...", total=total_entities)
 
             for entity_type, type_entities in entities_by_type.items():
@@ -314,10 +349,10 @@ class DataIngestion:
 
             # Ingest relationships
             rel_task = progress.add_task(
-                "[cyan]Ingesting relationships...", total=len(relationships)
+                "[cyan]Ingesting relationships...", total=len(normalized_relationships)
             )
-            rel_count = self.ingest_relationships_neo4j(relationships)
-            progress.update(rel_task, advance=len(relationships))
+            rel_count = self.ingest_relationships_neo4j(normalized_relationships)
+            progress.update(rel_task, advance=len(normalized_relationships))
 
             # Persist BM25 index
             bm25_task = progress.add_task("[cyan]Persisting BM25 index...", total=1)
@@ -407,6 +442,16 @@ class DataIngestion:
                 if key in entity and entity[key]:
                     metadata[key] = str(entity[key])
 
+            for key in ["source_system", "schema_version", "raw_type"]:
+                if key in entity and entity[key] is not None:
+                    metadata[key] = str(entity[key])
+                elif key == "source_system":
+                    metadata[key] = self.adapter.source_system
+                elif key == "schema_version":
+                    metadata[key] = self.adapter.schema_version
+                elif key == "raw_type":
+                    metadata[key] = entity.get("raw_type") or entity_type
+
             doc = LCDocument(page_content=content, metadata=metadata)
             documents.append(doc)
 
@@ -445,7 +490,7 @@ class DataIngestion:
         logger.info(f"Loaded {len(documents)} code chunks from repository")
 
         # Convert documents to entities
-        entities = self._documents_to_entities(documents)
+        entities = self._apply_provenance_batch(self._documents_to_entities(documents))
 
         postgres_writer = PostgresWriter()
         bm25_writer = BM25Writer()
@@ -510,7 +555,7 @@ class DataIngestion:
         logger.info(f"Loaded {len(documents)} document chunks")
 
         # Convert documents to requirement entities
-        entities = self._documents_to_requirements(documents)
+        entities = self._apply_provenance_batch(self._documents_to_requirements(documents))
 
         postgres_writer = PostgresWriter()
         bm25_writer = BM25Writer()

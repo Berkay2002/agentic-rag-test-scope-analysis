@@ -1037,25 +1037,17 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
         List of retrieved entity IDs
     """
     import re
-    from agrag.kg.ontology import NodeLabel, RelationshipType
+    from agrag.kg.registry import get_registry
 
     # Extract entity ID from query
     # Match patterns like REQ_AUTH_005, FUNC_initiate_handover, etc.
-    id_patterns = [
-        (r"CR_[A-Z]+_\d+", NodeLabel.CHANGE_REQUEST),
-        (r"FILE_[A-Za-z0-9_]+", NodeLabel.FILE),
-        (r"COMP_[A-Za-z0-9_]+", NodeLabel.COMPONENT),
-        (r"REQ_[A-Z]+_\d+", NodeLabel.REQUIREMENT),
-        (r"FUNC_[A-Za-z_]+", NodeLabel.FUNCTION),
-        (r"CLASS_[A-Za-z_]+", NodeLabel.CLASS),
-        (r"MOD_[A-Za-z_.]+", NodeLabel.MODULE),
-        (r"TC_[A-Z]+_\d+", NodeLabel.TEST_CASE),
-    ]
+    registry = get_registry()
+    id_patterns = list(registry.id_patterns().items())
 
     start_node_id = None
     start_node_label = None
 
-    for pattern, label in id_patterns:
+    for label, pattern in id_patterns:
         match = re.search(pattern, query)
         if match:
             start_node_id = match.group()
@@ -1068,10 +1060,11 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
             from agrag.storage import PostgresClient
 
             client = PostgresClient()
+            test_case_label = registry.normalize_label("TestCase") or "TestCase"
             keyword_results = client.keyword_search(
                 query=query,
                 k=5,
-                metadata_filter={"entity_type": NodeLabel.TEST_CASE.value},
+                metadata_filter={"entity_type": test_case_label},
             )
             if keyword_results:
                 from agrag.tools.search_utils import extract_signal_tokens
@@ -1088,7 +1081,7 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
 
                 seed_metadata = chosen.get("metadata") or {}
                 start_node_id = seed_metadata.get("entity_id")
-                start_node_label = NodeLabel.TEST_CASE
+                start_node_label = test_case_label
         except Exception as exc:
             logger.debug(
                 f"Graph seed extraction failed for query '{query[:50]}...': {exc}"
@@ -1100,33 +1093,46 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
         return []
 
     # Map entity types to appropriate traversal patterns
-    if start_node_label == NodeLabel.REQUIREMENT:
+    requirement_label = registry.normalize_label("Requirement")
+    function_label = registry.normalize_label("Function")
+    class_label = registry.normalize_label("Class")
+    module_label = registry.normalize_label("Module")
+    change_request_label = registry.normalize_label("ChangeRequest")
+    file_label = registry.normalize_label("File")
+    component_label = registry.normalize_label("Component")
+    rel = registry.normalize_relationship
+
+    if start_node_label == requirement_label:
         # Find tests that verify this requirement (TestCase -[VERIFIES]-> Requirement)
-        relationship_types = [RelationshipType.VERIFIES]
+        relationship_types = [r for r in [rel("VERIFIES")] if r]
         direction = "incoming"  # We want incoming VERIFIES relationships
-    elif start_node_label == NodeLabel.FUNCTION:
+    elif start_node_label == function_label:
         # Find tests that cover this function (TestCase -[COVERS]-> Function)
-        relationship_types = [RelationshipType.COVERS]
+        relationship_types = [r for r in [rel("COVERS")] if r]
         direction = "incoming"
-    elif start_node_label == NodeLabel.CLASS:
+    elif start_node_label == class_label:
         # Find tests that cover methods in this class
-        relationship_types = [RelationshipType.COVERS, RelationshipType.DEFINED_IN]
+        relationship_types = [r for r in [rel("COVERS"), rel("DEFINED_IN")] if r]
         direction = "incoming"
-    elif start_node_label == NodeLabel.MODULE:
+    elif start_node_label == module_label:
         # Find tests for code in this module
-        relationship_types = [RelationshipType.DEFINED_IN, RelationshipType.COVERS]
+        relationship_types = [r for r in [rel("DEFINED_IN"), rel("COVERS")] if r]
         direction = "incoming"
     elif start_node_label in [
-        NodeLabel.CHANGE_REQUEST,
-        NodeLabel.FILE,
-        NodeLabel.COMPONENT,
+        change_request_label,
+        file_label,
+        component_label,
     ]:
         relationship_types = [
-            RelationshipType.TOUCHES,
-            RelationshipType.DEFINED_IN,
-            RelationshipType.COVERS,
-            RelationshipType.VERIFIES,
-            RelationshipType.PART_OF,
+            r
+            for r in [
+                rel("TOUCHES"),
+                rel("DEFINED_IN"),
+                rel("COVERS"),
+                rel("VERIFIES"),
+                rel("PART_OF"),
+            ]
+            if r
         ]
         direction = "both"
     else:

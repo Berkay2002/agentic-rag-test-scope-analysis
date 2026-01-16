@@ -216,6 +216,9 @@ class PostgresWriter(BaseWriter):
         ]:
             if key in entity and entity[key] is not None:
                 metadata[key] = str(entity[key])
+        for key in ["source_system", "schema_version", "raw_type"]:
+            if key in entity and entity[key] is not None:
+                metadata[key] = str(entity[key])
         return metadata
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
@@ -312,11 +315,15 @@ class BM25Writer(BaseWriter):
         Returns:
             Metadata dictionary
         """
-        return {
+        metadata = {
             "entity_type": entity_type,
             "entity_id": entity.get("id"),
             "source": entity.get("file_path") or entity.get("path") or "unknown",
         }
+        for key in ["source_system", "schema_version", "raw_type"]:
+            if key in entity and entity[key] is not None:
+                metadata[key] = str(entity[key])
+        return metadata
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     def _write_bm25(self, entity: Dict[str, Any], entity_type: str) -> bool:
