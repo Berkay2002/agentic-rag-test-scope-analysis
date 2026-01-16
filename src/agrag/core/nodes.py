@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 from typing import Any, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -14,6 +15,13 @@ from agrag.config import settings
 logger = logging.getLogger(__name__)
 
 _REL_LABEL_PATTERN = re.compile(r"\[([A-Za-z0-9_]+)\]")
+_SEARCH_RESULT_HEADER_RE = re.compile(
+    r"^\s*\d+\.\s+Entity ID:\s*(.+?)\s+\(([^:]+):\s*([0-9.]+)\)"
+)
+_SEARCH_RESULT_SNIPPET_RE = re.compile(r"^\s*Snippet:\s*(.+)$")
+_SEARCH_RESULT_ENTITY_TYPE_RE = re.compile(r"^\s*Entity Type:\s*(.+)$")
+_GRAPH_PATH_LINE_RE = re.compile(r"^\s*(Path|Sequence):\s*(.+)$")
+_NODE_REF_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*):([A-Za-z0-9_\-]+)")
 
 
 def _render_content(content: Any) -> str:
@@ -110,6 +118,100 @@ def _update_message_content(message: AIMessage, content: str) -> AIMessage:
         return message
     except Exception:
         return AIMessage(content=content)
+
+
+def _parse_search_results(content: str, tool_name: str) -> List[Dict[str, Any]]:
+    contexts: List[Dict[str, Any]] = []
+    current: Optional[Dict[str, Any]] = None
+
+    for line in content.splitlines():
+        header_match = _SEARCH_RESULT_HEADER_RE.match(line)
+        if header_match:
+            if current:
+                contexts.append(current)
+            entity_id = header_match.group(1).strip()
+            score_str = header_match.group(3).strip()
+            try:
+                score = float(score_str)
+            except ValueError:
+                score = 0.0
+            current = {
+                "chunk_text": "",
+                "source": entity_id,
+                "entity_type": None,
+                "score": score,
+                "tool_name": tool_name,
+                "timestamp": time.time(),
+            }
+            continue
+
+        snippet_match = _SEARCH_RESULT_SNIPPET_RE.match(line)
+        if snippet_match and current is not None:
+            snippet = snippet_match.group(1).strip()
+            if snippet.endswith("..."):
+                snippet = snippet[:-3].rstrip()
+            current["chunk_text"] = snippet
+            continue
+
+        entity_type_match = _SEARCH_RESULT_ENTITY_TYPE_RE.match(line)
+        if entity_type_match and current is not None:
+            current["entity_type"] = entity_type_match.group(1).strip()
+            continue
+
+        if not line.strip() and current is not None:
+            contexts.append(current)
+            current = None
+
+    if current:
+        contexts.append(current)
+
+    return contexts
+
+
+def _parse_graph_traversal(content: str, tool_name: str) -> List[Dict[str, Any]]:
+    contexts: List[Dict[str, Any]] = []
+
+    for line in content.splitlines():
+        match = _GRAPH_PATH_LINE_RE.match(line)
+        if not match:
+            continue
+
+        path_text = match.group(2).strip()
+        node_refs = _NODE_REF_RE.findall(path_text)
+        entity_type = None
+        source = None
+        if node_refs:
+            entity_type, source = node_refs[-1]
+
+        contexts.append(
+            {
+                "chunk_text": path_text,
+                "source": source or "graph_path",
+                "entity_type": entity_type or "GraphPath",
+                "score": 0.0,
+                "tool_name": tool_name,
+                "timestamp": time.time(),
+            }
+        )
+
+    return contexts
+
+
+def extract_contexts_from_tool_result(
+    tool_name: str, tool_result: ToolMessage
+) -> List[Dict[str, Any]]:
+    """Extract structured contexts from tool results for evaluation."""
+    content = _render_content(tool_result.content)
+    if not content:
+        return []
+
+    if tool_name in {"vector_search", "keyword_search", "hybrid_search"}:
+        return _parse_search_results(content, tool_name)
+
+    if tool_name == "graph_traverse":
+        return _parse_graph_traversal(content, tool_name)
+
+    return []
 
 
 def call_model(
@@ -316,9 +418,23 @@ def execute_tools(state: AgentState, tools: List[BaseTool], enable_hitl: bool = 
 
     logger.info(f"Executed {len(tool_messages)} tools (total: {tool_call_count})")
 
+    retrieved_contexts: List[Dict[str, Any]] = []
+    if state.get("enable_context_tracking", False):
+        for tool_call, tool_message in zip(tool_calls, tool_messages):
+            tool_name = tool_call.get("name")
+            if not tool_name or not isinstance(tool_message, ToolMessage):
+                continue
+            retrieved_contexts.extend(
+                extract_contexts_from_tool_result(
+                    tool_name=tool_name,
+                    tool_result=tool_message,
+                )
+            )
+
     return {
         "messages": tool_messages,
         "tool_call_count": tool_call_count,
+        "retrieved_contexts": retrieved_contexts,
     }
 
 

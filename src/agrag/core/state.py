@@ -4,7 +4,8 @@ The project uses a custom `StateGraph` with a message-driven state.
 This TypedDict keeps the agent state explicit and evaluation-friendly.
 """
 
-from typing import TypedDict, List, Annotated
+import operator
+from typing import TypedDict, List, Annotated, Dict, Any
 from langchain_core.messages import BaseMessage
 from langgraph.graph import add_messages
 
@@ -31,3 +32,9 @@ class AgentState(TypedDict):
 
     # Final answer (when set, agent stops)
     final_answer: str
+
+    # Retrieved contexts (used for evaluation and RAG metrics)
+    retrieved_contexts: Annotated[List[Dict[str, Any]], operator.add]
+
+    # Toggle for tracking contexts during tool execution
+    enable_context_tracking: bool
