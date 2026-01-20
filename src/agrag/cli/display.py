@@ -58,7 +58,8 @@ def print_welcome(
     commands_table.add_column("Description")
     commands_table.add_row("/help", "Show available commands")
     commands_table.add_row("/clear", "Clear the screen")
-    commands_table.add_row("/history", "Show message history")
+    commands_table.add_row("/history", "Show checkpoints/history")
+    commands_table.add_row("/branches", "List conversation branches")
     commands_table.add_row("/stats", "Show conversation statistics")
     commands_table.add_row("/reset", "Start new conversation")
     commands_table.add_row("/save", "Save conversation to file")
@@ -200,6 +201,53 @@ def print_query_stats(console: Console, tool_calls: int, model_calls: int) -> No
     console.print()
 
 
+def print_reasoning(console: Console, reasoning_blocks: list[str], collapsed: bool = False) -> None:
+    """Print agent reasoning blocks separately from answer.
+    
+    Args:
+        console: Rich console for output.
+        reasoning_blocks: List of reasoning/thinking content strings.
+        collapsed: If True, show only a summary line instead of full reasoning.
+    """
+    if not reasoning_blocks:
+        return
+    
+    # Header with timestamp
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    header = Text()
+    header.append("🧠 ", style=COLORS["neutral"])
+    header.append("Thinking", style=f"bold {COLORS['neutral']}")
+    header.append(f"  {timestamp}", style="dim")
+    
+    if collapsed:
+        # Show collapsed summary
+        total_chars = sum(len(block) for block in reasoning_blocks)
+        summary = Text()
+        summary.append(f"{len(reasoning_blocks)} reasoning block(s), ", style="dim")
+        summary.append(f"~{total_chars} chars", style="dim")
+        summary.append(" (use /verbose to expand)", style="italic dim")
+        
+        console.print()
+        console.print(header)
+        console.print(Panel(summary, border_style="dim", padding=(0, 2)))
+    else:
+        # Show full reasoning
+        console.print()
+        console.print(header)
+        
+        # Combine reasoning blocks
+        reasoning_text = "\n\n---\n\n".join(reasoning_blocks)
+        
+        console.print(
+            Panel(
+                Markdown(reasoning_text),
+                title="Internal Deliberation",
+                border_style=COLORS["neutral"],
+                padding=(1, 2),
+            )
+        )
+
+
 def print_error(console: Console, message: str, traceback_str: str | None = None) -> None:
     """Print an error message.
 
@@ -212,6 +260,27 @@ def print_error(console: Console, message: str, traceback_str: str | None = None
     header = Text()
     header.append("✗ ", style=COLORS["error"])
     header.append("Error", style=f"bold {COLORS['error']}")
+
+    console.print()
+    console.print(header)
+    console.print(
+        Panel(
+            Text(message, style=COLORS["text"]),
+            border_style=COLORS["error"],
+            padding=(1, 2),
+        )
+    )
+
+    if traceback_str:
+        console.print()
+        console.print(
+            Panel(
+                Text(traceback_str, style="dim"),
+                title="Traceback",
+                border_style="dim",
+                padding=(1, 2),
+            )
+        )
 
     console.print()
 
@@ -338,24 +407,3 @@ def format_summary_table(
         lines.extend(stats_lines)
 
     return "\n".join(lines)
-    console.print(header)
-    console.print(
-        Panel(
-            Text(message, style=COLORS["text"]),
-            border_style=COLORS["error"],
-            padding=(1, 2),
-        )
-    )
-
-    if traceback_str:
-        console.print()
-        console.print(
-            Panel(
-                Text(traceback_str, style="dim"),
-                title="Traceback",
-                border_style="dim",
-                padding=(1, 2),
-            )
-        )
-
-    console.print()
