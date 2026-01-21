@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Callable, Awaitable, TypeVar
 
 from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import (
+from ragas.metrics.collections import (
     faithfulness,
     answer_relevancy,
     context_precision,
