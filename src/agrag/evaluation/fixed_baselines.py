@@ -7,7 +7,17 @@ def _invoke_tool(tool, **kwargs) -> str:
     if hasattr(tool, "invoke"):
         return tool.invoke(kwargs)
     if hasattr(tool, "_run"):
-        return tool._run(**kwargs)
+        import inspect
+
+        signature = inspect.signature(tool._run)
+        if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
+            return tool._run(**kwargs)
+
+        accepted = {
+            name for name, param in signature.parameters.items() if name != "self"
+        }
+        filtered = {key: value for key, value in kwargs.items() if key in accepted}
+        return tool._run(**filtered)
     raise TypeError("Tool does not support invoke or _run")
 
 

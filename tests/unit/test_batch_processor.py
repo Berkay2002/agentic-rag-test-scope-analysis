@@ -39,6 +39,7 @@ class TestLoadQueriesFromFile:
             assert loaded[1]["difficulty"] == "hard"
             assert loaded[2] == "test query 3"  # Simple string
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_json_array_of_strings(self):
@@ -54,6 +55,7 @@ class TestLoadQueriesFromFile:
             assert len(loaded) == 3
             assert loaded == queries
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_json_invalid_format(self):
@@ -67,6 +69,7 @@ class TestLoadQueriesFromFile:
             with pytest.raises(ValueError, match="JSON file must contain a list of queries"):
                 load_queries_from_file(f.name)
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_txt(self):
@@ -82,6 +85,7 @@ class TestLoadQueriesFromFile:
             assert len(loaded) == 4
             assert loaded == ["query1", "query2", "query3", "query4"]
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_csv_with_query_column(self):
@@ -103,6 +107,7 @@ class TestLoadQueriesFromFile:
             assert loaded[1]["query"] == "test query 2"
             assert loaded[1]["difficulty"] == "hard"
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_csv_without_query_column(self):
@@ -123,6 +128,7 @@ class TestLoadQueriesFromFile:
             assert loaded[1]["query"] == "test question 2"
             assert loaded[1]["difficulty"] == "hard"
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_csv_empty_file(self):
@@ -134,6 +140,7 @@ class TestLoadQueriesFromFile:
             with pytest.raises(ValueError, match="CSV file is empty or has no columns"):
                 load_queries_from_file(f.name)
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_unsupported_format(self):
@@ -145,6 +152,7 @@ class TestLoadQueriesFromFile:
             with pytest.raises(ValueError, match="Unsupported file format"):
                 load_queries_from_file(f.name)
 
+            f.close()
             Path(f.name).unlink()
 
     def test_load_queries_file_not_found(self):
@@ -174,6 +182,7 @@ class TestLoadQueriesFromFile:
             assert loaded[1] == "valid query 2"  # Simple string since only has query field
             assert loaded[2] == "valid query 3"
 
+            f.close()
             Path(f.name).unlink()
 
 
@@ -226,6 +235,7 @@ class TestSaveResultsToFile:
             assert data["results"][1]["status"] == "error"
             assert data["results"][1]["error_message"] == "Test error"
 
+            f.close()
             Path(f.name).unlink()
 
     def test_save_results_jsonl(self):
@@ -269,6 +279,7 @@ class TestSaveResultsToFile:
             assert result2["status"] == "error"
             assert result2["error_message"] == "Test error"
 
+            f.close()
             Path(f.name).unlink()
 
     def test_save_results_empty_list(self):
@@ -283,6 +294,7 @@ class TestSaveResultsToFile:
             assert data["metadata"]["total_queries"] == 0
             assert data["results"] == []
 
+            f.close()
             Path(f.name).unlink()
 
     def test_save_results_unsupported_format(self):
@@ -552,8 +564,10 @@ class TestBatchProcessingIntegration:
                 assert data["metadata"]["total_queries"] == 2
                 assert len(data["results"]) == 2
 
+                output_file.close()
                 Path(output_file.name).unlink()
 
+            input_file.close()
             Path(input_file.name).unlink()
 
     @pytest.mark.asyncio
@@ -600,8 +614,10 @@ class TestBatchProcessingIntegration:
                 assert result_data[1]["status"] == "error"
                 assert result_data[2]["status"] == "success"
 
+                output_file.close()
                 Path(output_file.name).unlink()
 
+            input_file.close()
             Path(input_file.name).unlink()
 
     def test_csv_with_special_characters(self):
@@ -620,6 +636,7 @@ class TestBatchProcessingIntegration:
             assert loaded[0]["description"] == 'description with "quotes"'
             assert loaded[1]["query"] == "query with\nnewline"
 
+            f.close()
             Path(f.name).unlink()
 
     @pytest.mark.asyncio

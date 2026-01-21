@@ -20,6 +20,11 @@ from agrag.cli.batch_processor import load_queries_from_file, save_results_to_fi
 class TestBatchWorkflow:
     """Integration tests for batch processing workflow."""
 
+    @pytest.fixture(autouse=True)
+    def _use_mock_batch(self, monkeypatch):
+        """Avoid real LLM/DB calls during batch workflow tests."""
+        monkeypatch.setenv("AGRAG_BATCH_MOCK", "1")
+
     @pytest.fixture
     def temp_dir(self):
         """Create a temporary directory for test files."""
@@ -314,11 +319,14 @@ class TestBatchWorkflow:
         output_file = temp_dir / "cli_results.json"
 
         # Run CLI batch command
+        env = os.environ.copy()
+        env.setdefault("AGRAG_BATCH_MOCK", "1")
+
         result = subprocess.run([
             "poetry", "run", "agrag", "batch", str(queries_file),
             "--output", str(output_file),
             "--format", "json"
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, env=env)
 
         print(f"Exit code: {result.returncode}")
         print(f"Stdout: {result.stdout}")
@@ -345,13 +353,16 @@ class TestBatchWorkflow:
         output_file = temp_dir / "cli_results.json"
 
         # Run CLI batch command with parameters
+        env = os.environ.copy()
+        env.setdefault("AGRAG_BATCH_MOCK", "1")
+
         result = subprocess.run([
             "poetry", "run", "agrag", "batch", str(queries_file),
             "--output", str(output_file),
             "--format", "json",
             "--param", "k=5",
             "--param", "strategy=hybrid"
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, env=env)
 
         print(f"Exit code: {result.returncode}")
         print(f"Stdout: {result.stdout}")
@@ -457,6 +468,11 @@ class TestBatchWorkflow:
 
 class TestRealBatchDemo:
     """Real batch processing demo with performance metrics."""
+
+    @pytest.fixture(autouse=True)
+    def _use_mock_batch(self, monkeypatch):
+        """Avoid real LLM/DB calls during demo batch tests."""
+        monkeypatch.setenv("AGRAG_BATCH_MOCK", "1")
 
     @pytest.fixture
     def temp_dir(self):
@@ -913,6 +929,7 @@ def test_actual_cli_batch_command():
 
         env = os.environ.copy()
         env.setdefault("AGRAG_EMBEDDINGS_MODE", "mock")
+        env.setdefault("AGRAG_BATCH_MOCK", "1")
         env.setdefault("LANGCHAIN_TRACING_V2", "false")
         env.setdefault("LANGSMITH_TRACING", "false")
         env.setdefault("MAX_MODEL_CALLS", "3")

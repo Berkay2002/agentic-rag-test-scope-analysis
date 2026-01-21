@@ -4,6 +4,7 @@ import asyncio
 import json
 import csv
 import time
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
@@ -68,8 +69,11 @@ class BatchQueryProcessor:
                 init_result = initialize_checkpointer(enable_hitl=False)
                 checkpointer = init_result.checkpointer
 
-            # Create agent graph
-            graph = create_agent_graph(checkpointer=checkpointer, enable_hitl=False)
+            # Create agent graph (or mock for tests/offline runs)
+            if os.getenv("AGRAG_BATCH_MOCK", "").lower() in {"1", "true", "yes"}:
+                graph = self._create_mock_graph()
+            else:
+                graph = create_agent_graph(checkpointer=checkpointer, enable_hitl=False)
 
             # Process queries
             if parallel:
@@ -93,6 +97,24 @@ class BatchQueryProcessor:
 
         self.results = results
         return results
+
+    @staticmethod
+    def _create_mock_graph():
+        """Create a mock graph for offline/test batch execution."""
+        from langchain_core.messages import AIMessage
+
+        class _MockGraph:
+            def invoke(self, state, config=None):
+                messages = state.get("messages", [])
+                query = ""
+                if messages:
+                    last = messages[-1]
+                    query = getattr(last, "content", "") or ""
+                return {
+                    "messages": [AIMessage(content=f"Mocked response for: {query}")]
+                }
+
+        return _MockGraph()
 
     async def _process_sequential(
         self,

@@ -2221,7 +2221,7 @@ def batch(ctx, input_file, output, format, thread_id, param, parallel):
             for error_type, count in report['error_types'].items():
                 click.echo(f"  {error_type}: {count}")
 
-        click.echo(f"\n✓ Results saved to: {output_path}")
+        click.echo(f"\n[OK] Results saved to: {output_path}")
 
     # Run the async function
     asyncio.run(_run_batch())
