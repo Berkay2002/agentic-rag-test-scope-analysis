@@ -9,7 +9,7 @@ so interrupts appear in `stream_mode="values"` (matching the CLI’s streaming c
 """
 
 import logging
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional, TypeVar
 
 from langchain_core.tools import BaseTool
 from langchain_core.messages import HumanMessage, ToolMessage
@@ -28,6 +28,36 @@ from agrag.storage import Neo4jClient, PostgresClient
 from agrag.config import settings
 
 logger = logging.getLogger(__name__)
+TClient = TypeVar("TClient")
+
+
+def _init_client(
+    name: str,
+    existing: Optional[TClient],
+    factory: Callable[[], TClient],
+    healthcheck: Callable[[TClient], bool],
+) -> Optional[TClient]:
+    if existing is not None:
+        client = existing
+    else:
+        try:
+            client = factory()
+        except Exception as exc:
+            logger.warning(
+                "%s client initialization failed; related tools disabled. %s",
+                name,
+                exc,
+            )
+            return None
+
+    if not healthcheck(client):
+        close = getattr(client, "close", None)
+        if callable(close):
+            close()
+        logger.warning("%s connectivity check failed; related tools disabled.", name)
+        return None
+
+    return client
 
 
 # System prompt for test scope analysis
@@ -208,20 +238,34 @@ def create_agent_graph(
         )
 
     # Initialize clients
-    neo4j = neo4j_client or Neo4jClient()
-    postgres = postgres_client or PostgresClient()
+    neo4j = _init_client("Neo4j", neo4j_client, Neo4jClient, lambda c: c.is_healthy())
+    postgres = _init_client(
+        "PostgreSQL",
+        postgres_client,
+        PostgresClient,
+        lambda c: c.is_healthy(),
+    )
 
     # Initialize tools using factory functions (modern @tool decorator pattern)
     # - create_vector_search_tool: uses PostgreSQL pgvector HNSW index
     # - create_keyword_search_tool: uses PostgreSQL pg_search BM25 index
     # - create_graph_traverse_tool: uses Neo4j graph traversal (relationships only)
     # - create_hybrid_search_tool: uses PostgreSQL (pgvector + pg_search BM25 with RRF)
-    tools: List[BaseTool] = [
-        create_vector_search_tool(postgres_client=postgres),
-        create_keyword_search_tool(postgres_client=postgres),
-        create_graph_traverse_tool(neo4j_client=neo4j),
-        create_hybrid_search_tool(postgres_client=postgres),
-    ]
+    tools: List[BaseTool] = []
+
+    if postgres is not None:
+        tools.extend(
+            [
+                create_vector_search_tool(postgres_client=postgres),
+                create_keyword_search_tool(postgres_client=postgres),
+            ]
+        )
+
+    if neo4j is not None:
+        tools.append(create_graph_traverse_tool(neo4j_client=neo4j))
+
+    if postgres is not None:
+        tools.append(create_hybrid_search_tool(postgres_client=postgres))
 
     logger.info(f"Initialized {len(tools)} tools: {[t.name for t in tools]}")
 

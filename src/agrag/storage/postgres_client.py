@@ -98,6 +98,17 @@ class PostgresClient:
             logger.error(f"PostgreSQL connectivity check failed: {e}")
             return False
 
+    def is_healthy(self) -> bool:
+        """Check if PostgreSQL connection is healthy.
+
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        try:
+            return self.verify_connectivity()
+        except Exception:
+            return False
+
     def setup_schema(self) -> None:
         """
         Set up PostgreSQL schema (create tables, indexes, extensions).

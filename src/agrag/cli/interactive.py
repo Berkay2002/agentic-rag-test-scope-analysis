@@ -14,7 +14,9 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import AIMessage, ToolMessage
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.application.current import get_app
+from prompt_toolkit.completion import ConditionalCompleter, WordCompleter
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.input import create_input
 from prompt_toolkit.output import create_output
@@ -140,10 +142,21 @@ class InteractiveChat:
         """Initialize prompt toolkit session."""
         self.history = InMemoryHistory()
         # Only show command completions when typing a slash
-        self.completer = WordCompleter(
+        command_completer = WordCompleter(
             CHAT_COMMANDS,
             ignore_case=True,
             pattern=re.compile(r"^/.*"),  # Only match when line starts with /
+        )
+        def _should_complete_commands() -> bool:
+            try:
+                buffer_text = get_app().current_buffer.document.text
+            except Exception:
+                return False
+            return buffer_text.lstrip().startswith("/")
+
+        self.completer = ConditionalCompleter(
+            command_completer,
+            Condition(_should_complete_commands),
         )
         self.style = Style.from_dict({"prompt": "#00aa00 bold"})
 
@@ -458,7 +471,7 @@ class InteractiveChat:
             tool_names = [tc.get("name", "unknown") for tc in last_message.tool_calls]
             result["tool_calls"] = len(last_message.tool_calls)
             status.update(f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}")
-            if self.verbose:
+            if self.verbose or not self.enable_hitl:
                 status.stop()
             for tool_call in last_message.tool_calls:
                 tool_call_id = str(tool_call.get("id", ""))
@@ -476,9 +489,9 @@ class InteractiveChat:
                         "arguments": tool_args,
                     }
                 )
-                if self.verbose:
+                if self.verbose or not self.enable_hitl:
                     print_tool_call(self.console, tool_name, tool_call_id, tool_args)
-            if self.verbose:
+            if self.verbose or not self.enable_hitl:
                 status.start()
                 status.update(f"[bold yellow]🔧 Executing tools: {', '.join(tool_names)}")
 
