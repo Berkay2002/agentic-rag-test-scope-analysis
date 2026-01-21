@@ -12,7 +12,7 @@ import logging
 from typing import Any, List, Optional
 
 from langchain_core.tools import BaseTool
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -256,6 +256,10 @@ def create_agent_graph(
         model_calls = state.get("model_call_count", 0)
         tool_calls = state.get("tool_call_count", 0)
         if model_calls >= settings.max_model_calls or tool_calls >= settings.max_tool_calls:
+            messages = state.get("messages") or []
+            last_message = messages[-1] if messages else None
+            if isinstance(last_message, ToolMessage):
+                return "call_model"
             return "end"
         return "call_model"
 

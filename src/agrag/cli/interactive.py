@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import sys
 import traceback
 import uuid
@@ -142,7 +143,7 @@ class InteractiveChat:
         self.completer = WordCompleter(
             CHAT_COMMANDS,
             ignore_case=True,
-            pattern=r"^/.*",  # Only match when line starts with /
+            pattern=re.compile(r"^/.*"),  # Only match when line starts with /
         )
         self.style = Style.from_dict({"prompt": "#00aa00 bold"})
 
@@ -290,6 +291,8 @@ class InteractiveChat:
         """
         config = self._get_config()
 
+        self._reset_counters_per_message(config)
+
         try:
             initial_state = create_initial_state(query)
             stats = {"tool_calls": 0, "model_calls": 0}
@@ -303,6 +306,11 @@ class InteractiveChat:
                 elif result.get("cancelled"):
                     final_answer = "Query cancelled by user."
                     self._log_event({"type": "assistant", "content": final_answer})
+
+            if final_answer == "No answer generated":
+                fallback_answer = self._extract_final_answer_from_state(config)
+                if fallback_answer:
+                    final_answer = fallback_answer
 
             # Update stats
             self.tool_calls_total += stats["tool_calls"]
@@ -339,6 +347,7 @@ class InteractiveChat:
             Dict with 'answer' (str) and/or 'cancelled' (bool).
         """
         result: Dict[str, Any] = {}
+        last_tool_output: Optional[str] = None
 
         for event in self.graph.stream(input_state, config=config, stream_mode="values"):
             # Check for interrupts (HITL)
@@ -372,8 +381,59 @@ class InteractiveChat:
                 stats["model_calls"] += event_result["model_calls"]
             if event_result.get("answer"):
                 result["answer"] = event_result["answer"]
+            if event_result.get("tool_output"):
+                last_tool_output = event_result["tool_output"]
+
+        if not result.get("answer") and last_tool_output:
+            result["answer"] = (
+                "No final response was generated. "
+                "Last tool output:\n\n"
+                f"{last_tool_output}"
+            )
 
         return result
+
+    def _reset_counters_per_message(self, config: RunnableConfig) -> None:
+        """Reset tool/model counters so limits apply per user message."""
+        if not self.checkpointer:
+            return
+
+        try:
+            self.graph.update_state(
+                config=config,
+                values={
+                    "tool_call_count": 0,
+                    "model_call_count": 0,
+                    "final_answer": "",
+                },
+                as_node="call_model",
+            )
+        except Exception:
+            return
+
+    def _extract_final_answer_from_state(self, config: RunnableConfig) -> Optional[str]:
+        """Fallback to retrieve the last AI response from graph state."""
+        try:
+            state = self.graph.get_state(config)
+        except Exception:
+            return None
+
+        messages = state.values.get("messages", []) if state and state.values else []
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                return extract_message_content(msg.content)
+
+        if messages:
+            last_message = messages[-1]
+            if isinstance(last_message, ToolMessage) and last_message.content:
+                tool_output = extract_message_content(last_message.content)
+                return (
+                    "No final response was generated. "
+                    "Last tool output:\n\n"
+                    f"{tool_output}"
+                )
+
+        return None
 
     def _process_event(self, event: Dict[str, Any], status: Any) -> Dict[str, Any]:
         """Process a single stream event.
@@ -427,7 +487,8 @@ class InteractiveChat:
             tool_call_id = str(last_message.tool_call_id or "")
             tool_info = self._tool_call_index.get(tool_call_id, {})
             tool_name = tool_info.get("name")
-            tool_output = self._extract_content(last_message.content)
+            tool_output = extract_message_content(last_message.content)
+            result["tool_output"] = tool_output
             self._log_event(
                 {
                     "type": "tool_result",
