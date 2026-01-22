@@ -30,9 +30,10 @@ from agrag.cli.display import (
     print_query_stats,
     print_welcome,
     print_tool_call,
+    print_reasoning,
 )
 from agrag.cli.hitl import HITLHandler
-from agrag.cli.utils import extract_message_content
+from agrag.cli.utils import extract_message_content, extract_reasoning_and_answer
 from agrag.config import settings
 from agrag.core import create_agent_graph, create_initial_state
 from agrag.core.checkpointing import initialize_checkpointer, summarize_error
@@ -57,6 +58,10 @@ CHAT_COMMANDS = [
     "/export",
     "/verbose",
     "/thinking",
+    "/threads",
+    "/branches",
+    "/fork",
+    "/checkout",
 ]
 
 
@@ -513,7 +518,23 @@ class InteractiveChat:
 
         elif isinstance(last_message, AIMessage) and last_message.content:
             result["model_calls"] = 1
-            result["answer"] = extract_message_content(last_message.content)
+            
+            # Extract reasoning blocks and answer separately
+            reasoning_blocks, answer_text = extract_reasoning_and_answer(last_message.content)
+            
+            # Display reasoning if present
+            if reasoning_blocks:
+                if self.verbose:
+                    status.stop()
+                    print_reasoning(self.console, reasoning_blocks, collapsed=False)
+                    status.start()
+                else:
+                    # Show collapsed reasoning by default
+                    status.stop()
+                    print_reasoning(self.console, reasoning_blocks, collapsed=True)
+                    status.start()
+            
+            result["answer"] = answer_text if answer_text else extract_message_content(last_message.content)
             self._log_event({"type": "assistant", "content": result["answer"]})
             status.update("[bold blue]Agent is reasoning...")
 

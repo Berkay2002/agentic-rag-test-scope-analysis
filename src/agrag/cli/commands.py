@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.text import Text
 
 from agrag.cli.thinking import handle_thinking_command, format_thinking_setting
+from agrag.cli.branching import BranchManager, print_checkpoints, print_branches
 
 # Import colors from display module
 from agrag.cli.display import COLORS
@@ -28,6 +29,7 @@ class ChatSessionProtocol(Protocol):
     thinking_level: Optional[str]
     enable_hitl: bool
     verbose: bool
+    checkpointer: any  # BaseCheckpointSaver type
 
     def _persistence_label(self) -> str: ...
     def export_conversation(
@@ -56,6 +58,10 @@ def print_help(console: Console) -> None:
     commands_table.add_row("/export [file] [--verbose]", "Export conversation transcript")
     commands_table.add_row("/verbose [on|off]", "Toggle tool call details")
     commands_table.add_row("/thinking [level|budget]", "View or set thinking configuration")
+    commands_table.add_row("/history", "Show conversation checkpoints")
+    commands_table.add_row("/threads", "List available threads (same as /history)")
+    commands_table.add_row("/branches", "List conversation branches")
+    commands_table.add_row("/fork [checkpoint]", "Create branch from checkpoint")
     commands_table.add_row("/exit, /quit", "Exit the chat")
 
     # Example queries
@@ -165,6 +171,11 @@ class CommandHandler:
         self.console = console
         self.session = session
         self._print_welcome_callback = None
+        
+        # Initialize branch manager if checkpointer is available
+        self.branch_manager = None
+        if hasattr(session, 'checkpointer') and session.checkpointer:
+            self.branch_manager = BranchManager(session.checkpointer, session.thread_id)
 
     def set_welcome_callback(self, callback) -> None:
         """Set callback for printing welcome message (used by /clear).
@@ -269,6 +280,65 @@ class CommandHandler:
             )
             if new_setting is not None:
                 self.session.thinking_level, self.session.thinking_budget = new_setting
+
+        elif command in ["/history", "/threads"]:
+            if not self.branch_manager:
+                self.console.print(
+                    "[yellow]Thread history requires a persistent checkpointer (PostgreSQL).[/yellow]"
+                )
+                return True
+            
+            checkpoints = self.branch_manager.list_checkpoints()
+            print_checkpoints(self.console, checkpoints)
+
+        elif command == "/branches":
+            if not self.branch_manager:
+                self.console.print(
+                    "[yellow]Branching requires a persistent checkpointer (PostgreSQL).[/yellow]"
+                )
+                return True
+            
+            branches = self.branch_manager.list_branches()
+            print_branches(self.console, branches)
+
+        elif command.startswith("/fork"):
+            if not self.branch_manager:
+                self.console.print(
+                    "[yellow]Branching requires a persistent checkpointer (PostgreSQL).[/yellow]"
+                )
+                return True
+            
+            parts = raw_command.split(maxsplit=1)
+            if len(parts) < 2:
+                self.console.print(
+                    "[yellow]Usage: /fork <checkpoint_id> [branch_name][/yellow]"
+                )
+                return True
+            
+            # Parse checkpoint and optional branch name
+            args = parts[1].split()
+            checkpoint_id = args[0]
+            branch_name = args[1] if len(args) > 1 else None
+            
+            try:
+                new_thread_id = self.branch_manager.create_branch(checkpoint_id, branch_name)
+                self.console.print(
+                    f"[green]✓ Created branch from checkpoint {checkpoint_id}[/green]"
+                )
+                self.console.print(f"[cyan]New thread ID: {new_thread_id}[/cyan]")
+                self.console.print(
+                    f"[dim]To switch to this branch, restart with:[/dim]\n"
+                    f"[cyan]agrag chat --thread-id {new_thread_id}[/cyan]"
+                )
+            except Exception as e:
+                self.console.print(f"[red]✗ Failed to create branch: {e}[/red]")
+
+        elif command.startswith("/checkout"):
+            self.console.print(
+                "[yellow]Branch checkout is not yet implemented.[/yellow]\n"
+                "[dim]To switch branches, restart the chat with a different thread ID:[/dim]\n"
+                "[cyan]agrag chat --thread-id <thread_id>[/cyan]"
+            )
 
         else:
             self.console.print(f"[red]Unknown command: {command}[/red]")
