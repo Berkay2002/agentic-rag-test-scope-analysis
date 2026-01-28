@@ -5,12 +5,11 @@ import hashlib
 import logging
 import os
 
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_openai import OpenAIEmbeddings
 from langchain_core.embeddings import Embeddings
-from pydantic import SecretStr
 
 from agrag.config import settings
+from agrag.models.google import create_google_embeddings
+from agrag.models.openai import create_openai_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -28,45 +27,44 @@ class EmbeddingService:
 
         Args:
             model: Embedding model name (defaults to settings)
-            api_key: Google API key (defaults to settings)
+            api_key: Provider API key (defaults to settings)
         """
-        self.model_name = model or settings.google_embedding_model
-        self.api_key = api_key or settings.google_api_key
+        provider = (settings.embeddings_provider or "").lower()
+        self.model_name = model or (
+            settings.openai_embedding_model if provider == "openai" else settings.google_embedding_model
+        )
+        if provider == "openai":
+            default_key = settings.openai_embedding_api_key or settings.openai_api_key
+        else:
+            default_key = settings.google_api_key
+        self.api_key = api_key or default_key
 
         self.use_mock = _should_use_mock_embeddings()
         self.embeddings: Optional[Embeddings] = None
         mode = "mock" if self.use_mock else "unconfigured"
 
         if not self.use_mock:
-            provider = (settings.embeddings_provider or "").lower()
             if provider == "google":
-                if not self.api_key:
-                    raise ValueError("GOOGLE_API_KEY must be provided for embeddings")
-
-                api_key_value = SecretStr(self.api_key) if self.api_key else None
-                self.embeddings = GoogleGenerativeAIEmbeddings(
+                self.model_name = model or settings.google_embedding_model
+                self.api_key = api_key or settings.google_api_key
+                self.embeddings = create_google_embeddings(
                     model=self.model_name,
-                    api_key=api_key_value,
-                    output_dimensionality=settings.embedding_dimensions,
+                    api_key=self.api_key,
                 )
                 mode = "google"
             elif provider == "openai":
-                model_name = model or settings.openai_embedding_model
-                key = api_key or settings.openai_embedding_api_key or settings.openai_api_key
-                base_url = settings.openai_embedding_base_url or settings.openai_base_url
-                org = settings.openai_embedding_organization or settings.openai_organization
-
-                if not key:
-                    raise ValueError("OPENAI_API_KEY must be provided for embeddings")
-
-                api_key_value = SecretStr(key) if key else None
-                self.embeddings = OpenAIEmbeddings(
-                    model=model_name,
-                    api_key=api_key_value,
-                    base_url=base_url,
-                    organization=org,
+                self.model_name = model or settings.openai_embedding_model
+                self.api_key = (
+                    api_key or settings.openai_embedding_api_key or settings.openai_api_key
                 )
-                self.model_name = model_name
+                self.embeddings = create_openai_embeddings(
+                    model=self.model_name,
+                    api_key=self.api_key,
+                    base_url=settings.openai_embedding_base_url or settings.openai_base_url,
+                    organization=(
+                        settings.openai_embedding_organization or settings.openai_organization
+                    ),
+                )
                 mode = "openai"
             else:
                 raise ValueError(f"Unsupported embeddings provider: {provider}")
