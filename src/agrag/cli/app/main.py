@@ -354,7 +354,7 @@ def query(
 @click.option(
     "--output",
     type=click.Path(),
-    default="evaluation_results.json",
+    default=None,
     help="Output file for results",
 )
 @click.option(
@@ -496,6 +496,20 @@ def evaluate(
             return str((repo_root / candidate).resolve())
         return str((registry_parent / candidate).resolve())
 
+    def _default_evaluation_output(
+        dataset_path: str, strategy_value: Optional[str], prefix: Optional[str] = None
+    ) -> str:
+        date_stamp = datetime.utcnow().strftime("%Y-%m-%d")
+        output_dir = Path("docs") / "evaluations" / "mock" / date_stamp
+        dataset_stem = Path(dataset_path).stem
+        parts = ["evaluation_results", dataset_stem]
+        if strategy_value:
+            parts.append(strategy_value)
+        if prefix:
+            parts.insert(1, prefix)
+        filename = ".".join(parts) + ".json"
+        return str(output_dir / filename)
+
     def _run_single_evaluation(
         dataset_path: str,
         output_path: Optional[str],
@@ -573,6 +587,7 @@ def evaluate(
                 )
 
                 if output_path:
+                    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
                     with open(output_path, "w") as f:
                         json.dump(result, f, indent=2)
 
@@ -770,6 +785,7 @@ def evaluate(
             }
 
             if output_path:
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, "w") as f:
                     json.dump(output_data, f, indent=2)
 
@@ -805,6 +821,12 @@ def evaluate(
                 raise click.UsageError(f"Dataset not found: {resolved_path}")
 
             output_path = entry.get("output", output)
+            if not output_path:
+                output_path = _default_evaluation_output(
+                    dataset_path=resolved_path,
+                    strategy_value=entry.get("strategy", strategy),
+                    prefix=suite_def.get("name", suite),
+                )
             if output_path:
                 output_candidate = Path(output_path)
                 output_path = str(
@@ -833,7 +855,7 @@ def evaluate(
 
     _run_single_evaluation(
         dataset_path=dataset,
-        output_path=output,
+        output_path=output or _default_evaluation_output(dataset, strategy),
         k_values_value=k_values,
         strategy_value=strategy,
         use_ragas_value=use_ragas,
@@ -1263,7 +1285,7 @@ def _parse_result_ids(result_str: str) -> list:
 def _run_agent_evaluation(
     queries: list,
     k_list: list,
-    output: str,
+    output: Optional[str],
     verbose: bool,
     use_ragas: bool,
     num_trials: int,
@@ -1280,7 +1302,7 @@ def _run_agent_evaluation(
     Args:
         queries: List of query dictionaries
         k_list: K values for P@k, R@k metrics
-        output: Output file path
+    output: Output file path (optional)
         verbose: Whether to show per-query progress
     """
     import json
@@ -1397,10 +1419,13 @@ def _run_agent_evaluation(
         },
     }
 
-    with open(output, "w") as f:
-        json.dump(output_data, f, indent=2)
+    if output:
+        with open(output, "w") as f:
+            json.dump(output_data, f, indent=2)
 
-    click.echo(f"\n✓ Results saved to: {output}")
+        click.echo(f"\n✓ Results saved to: {output}")
+    else:
+        click.echo("\n✓ Evaluation completed (no output file specified)")
 
 
 @cli.command()

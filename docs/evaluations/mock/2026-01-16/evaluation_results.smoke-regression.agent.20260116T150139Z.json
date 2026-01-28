@@ -1,6 +1,6 @@
 {
   "strategy": "agent",
-  "dataset": "/Volumes/extSSD/dev/projects/agentic-rag-test-scope-analysis/data/eval_queries_smoke.json",
+  "dataset": "data/mock/eval_queries_smoke.json",
   "queries_count": 2,
   "k_values": [
     1,

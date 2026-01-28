@@ -1,6 +1,6 @@
 {
   "strategy": "agent",
-  "dataset": "data/eval_queries_synthetic.json",
+  "dataset": "data/mock/eval_queries_synthetic.json",
   "queries_count": 3,
   "k_values": [
     1,
