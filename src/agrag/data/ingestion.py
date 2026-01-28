@@ -1,9 +1,10 @@
 """Data ingestion pipeline for loading data into Neo4j and PostgreSQL."""
 
-from typing import List, Dict, Any, Optional
-from pathlib import Path
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from langchain_core.documents import Document as LCDocument
 
@@ -14,11 +15,12 @@ from agrag.data.storage_writers import PostgresWriter, BM25Writer
 from agrag.models.core.embeddings import get_embedding_service
 from agrag.kg.adapter import SourceAdapter
 from agrag.kg.registry import get_registry
+from agrag.config.paths import BM25_INDEX_PATH as DEFAULT_BM25_INDEX_PATH
 
 logger = logging.getLogger(__name__)
 
 # Default path for persisted BM25 index
-BM25_INDEX_PATH = "data/bm25_index.pkl"
+BM25_INDEX_PATH = str(DEFAULT_BM25_INDEX_PATH)
 
 
 class DataIngestion:

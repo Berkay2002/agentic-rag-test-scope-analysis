@@ -1,18 +1,19 @@
 import json
 import os
 from pathlib import Path
+from typing import Iterator
 
 import pytest
 
 from agrag.config import settings
 from agrag.storage import Neo4jClient, PostgresClient
 
-DATASET_PATH = Path("data/synthetic_dataset.json")
+DATASET_PATH = Path("data/mock/synthetic_dataset.json")
 
 
 def _skip_if_missing_dataset() -> None:
     if not DATASET_PATH.exists():
-        pytest.skip("Synthetic dataset not found at data/synthetic_dataset.json")
+        pytest.skip("Synthetic dataset not found at data/mock/synthetic_dataset.json")
 
 
 @pytest.fixture(scope="session")
@@ -23,7 +24,7 @@ def dataset() -> dict:
 
 
 @pytest.fixture(scope="session")
-def postgres_client() -> PostgresClient:
+def postgres_client() -> Iterator[PostgresClient]:
     try:
         client = PostgresClient()
     except ValueError as exc:
@@ -35,7 +36,7 @@ def postgres_client() -> PostgresClient:
 
 
 @pytest.fixture(scope="session")
-def neo4j_client() -> Neo4jClient:
+def neo4j_client() -> Iterator[Neo4jClient]:
     try:
         client = Neo4jClient()
     except ValueError as exc:

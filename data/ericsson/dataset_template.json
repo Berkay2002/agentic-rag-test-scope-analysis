@@ -1,0 +1,10 @@
+{
+  "metadata": {
+    "source_system": "ericsson",
+    "schema_version": "v1",
+    "generated_at": "YYYY-MM-DD",
+    "notes": "Replace this template with the actual Ericsson export."
+  },
+  "entities": [],
+  "relationships": []
+}

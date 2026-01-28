@@ -66,7 +66,7 @@ flowchart LR
 **Grader types mapped to this codebase:**
 - **Code-based (deterministic):** Retrieval metrics in `src/agrag/evaluation/metrics.py`, entity-ID matching in `src/agrag/evaluation/langsmith_evaluator.py`, and tool-usage tracking in `src/agrag/evaluation/tool_tracker.py` (run via `agrag evaluate` in `src/agrag/cli/main.py`).
 - **Model-based (LLM-as-judge):** Ragas metrics in `src/agrag/evaluation/ragas_metrics.py` (enabled with `--use-ragas` or LangSmith evals).
-- **Human review:** Manual inspection of LangSmith experiment traces (optional `--use-langsmith`) and written summaries under `docs/evaluations/2026-01-16/`.
+- **Human review:** Manual inspection of LangSmith experiment traces (optional `--use-langsmith`) and written summaries under `docs/evaluations/mock/2026-01-16/`.
 
 **Evaluation flow (simplified):**
 ```mermaid
@@ -117,6 +117,6 @@ poetry run agrag evaluate \
 ```bash
 poetry run agrag init
 poetry run agrag generate --requirements 50 --testcases 200
-poetry run agrag ingest data/synthetic_dataset.json
+poetry run agrag ingest data/mock/synthetic_dataset.json
 poetry run agrag query "tests for handover"
 ```

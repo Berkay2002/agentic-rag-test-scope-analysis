@@ -10,6 +10,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from agrag.storage.neo4j_client import Neo4jClient
 from agrag.storage.postgres_client import PostgresClient
 from agrag.storage.bm25_retriever import BM25RetrieverManager
+from agrag.config.paths import BM25_INDEX_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +270,7 @@ class BM25Writer(BaseWriter):
     def __init__(
         self,
         bm25_manager: Optional[BM25RetrieverManager] = None,
-        index_path: str = "data/bm25_index.pkl",
+        index_path: str = str(BM25_INDEX_PATH),
     ):
         """Initialize BM25Writer.
 

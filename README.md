@@ -274,8 +274,12 @@ poetry run agrag generate --requirements 50 --testcases 200 --with-eval
 poetry run agrag generate --requirements 50 --testcases 200 --ingest
 
 # Ingest data into databases
-poetry run agrag ingest data/synthetic_dataset.json
+poetry run agrag ingest data/mock/synthetic_dataset.json
 ```
+
+Data layout (override root with `AGRAG_DATA_ROOT`):
+- `data/mock/` for synthetic datasets and evaluation queries
+- `data/ericsson/` for real Ericsson exports (see `dataset_template.json`)
 
 #### Initialize Databases
 ```bash
@@ -285,23 +289,23 @@ poetry run agrag init
 #### Run Evaluation
 ```bash
 # Evaluate all strategies on a dataset
-poetry run agrag evaluate --dataset data/eval_queries.json --output results.json
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --output results.json
 
 # Evaluate specific strategy
-poetry run agrag evaluate --dataset data/eval_queries.json --strategy vector
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --strategy vector
 
 # Evaluate with synthetic capability suite
 poetry run agrag evaluate --suite synthetic-capability
 
 # Evaluate the full agent with dynamic tool selection (RQ2)
-poetry run agrag evaluate --dataset data/eval_queries.json --strategy agent
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --strategy agent
 
 # Evaluate fixed baselines (RAG vs GraphRAG)
-poetry run agrag evaluate --dataset data/eval_queries.json --strategy rag
-poetry run agrag evaluate --dataset data/eval_queries.json --strategy graphrag
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --strategy rag
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --strategy graphrag
 
 # Evaluate with verbose per-query metrics
-poetry run agrag evaluate --dataset data/eval_queries.json --strategy all --verbose
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --strategy all --verbose
 ```
 
 #### Show Configuration

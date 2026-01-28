@@ -57,7 +57,7 @@ poetry run agrag load docs /path/to/docs --use-chunker --formats pdf,docx
 poetry run agrag load repo /path/to/repo --languages python,java
 
 # Run evaluation
-poetry run agrag evaluate --dataset data/eval_queries.json --strategy all --verbose
+poetry run agrag evaluate --dataset data/mock/eval_queries.json --strategy all --verbose
 
 # Interactive development/testing
 poetry run agrag chat --thread-id dev-session

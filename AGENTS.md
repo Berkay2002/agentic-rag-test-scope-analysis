@@ -21,7 +21,7 @@ poetry run agrag init  # Creates DB schemas, indexes
 **Generate data:**
 ```bash
 poetry run agrag generate --requirements 50 --testcases 200
-poetry run agrag ingest data/synthetic_dataset.json
+poetry run agrag ingest data/mock/synthetic_dataset.json
 ```
 
 ## Project Structure
@@ -162,7 +162,7 @@ poetry run ruff check --fix src/ tests/     # Fix auto-fixable
 **Run eval:**
 ```bash
 poetry run agrag evaluate \
-  --dataset data/eval_queries.json \
+  --dataset data/mock/eval_queries.json \
   --output results.json \
   --k-values "1,3,5,10"
 ```
@@ -212,7 +212,7 @@ SELECT chunk_id, content, paradedb.score(id) FROM document_chunks WHERE content 
 **Most common commands:**
 ```bash
 poetry install && cp .env.example .env && poetry run agrag init
-poetry run agrag generate && poetry run agrag ingest data/synthetic_dataset.json
+poetry run agrag generate && poetry run agrag ingest data/mock/synthetic_dataset.json
 poetry run agrag chat              # Safe mode
 poetry run agrag chat --yolo       # YOLO mode
 poetry run agrag query "your question"
