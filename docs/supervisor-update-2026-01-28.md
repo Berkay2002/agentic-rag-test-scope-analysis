@@ -36,18 +36,18 @@
 ```mermaid
 flowchart LR
     User[User Query] --> Agent["ReAct Agent<br>LangGraph"]
-    Agent --> VS["Vector Search<br>pgvector HNSW"]
-    Agent --> KS["Keyword Search<br>BM25 pg_search"]
-    Agent --> HS["Hybrid Search<br>RRF fusion"]
-    Agent --> GT["Graph Traversal<br>Neo4j Cypher"]
+    Agent -->|vector_search| VS["Vector Search<br>pgvector HNSW"]
+    Agent -->|keyword_search| KS["Keyword Search<br>BM25 pg_search"]
+    Agent -->|hybrid_search| HS["Hybrid Search<br>RRF fusion"]
+    Agent -->|graph_traverse| GT["Graph Traversal<br>Neo4j Cypher"]
 
-    VS --> PG[(PostgreSQL)]
-    KS --> PG
-    HS --> PG
-    GT --> N4J[(Neo4j)]
+    VS -->|PostgresClient| PG[(PostgreSQL)]
+    KS -->|BM25RetrieverManager| PG
+    HS -->|PostgresClient| PG
+    GT -->|Neo4jClient| N4J[(Neo4j)]
 
-    PG --> Agent
-    N4J --> Agent
+    PG -->|SearchOutput| Agent
+    N4J -->|GraphTraverseOutput| Agent
     Agent --> Answer["Ranked Test Cases + Evidence"]
 ```
 
