@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock
 
-from agrag.tools.base import (
+from agrag.tools.shared.base import (
     BaseToolWrapper,
     format_search_results_header,
     format_search_result_item,

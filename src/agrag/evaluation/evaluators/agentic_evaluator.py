@@ -16,17 +16,17 @@ from statistics import mean, pstdev
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
-from agrag.evaluation.metrics import (
+from agrag.evaluation.metrics.metrics import (
     evaluate_retrieval,
     average_precision,
     reciprocal_rank,
 )
-from agrag.evaluation.entity_extractor import (
+from agrag.evaluation.utils.entity_extractor import (
     extract_entity_ids,
     extract_from_tool_results,
 )
-from agrag.evaluation.tool_tracker import ToolTracker
-from agrag.evaluation.ragas_metrics import RagasEvaluator
+from agrag.evaluation.utils.tool_tracker import ToolTracker
+from agrag.evaluation.evaluators.ragas_metrics import RagasEvaluator
 from agrag.cli.utils import extract_message_content
 from agrag.config import settings
 

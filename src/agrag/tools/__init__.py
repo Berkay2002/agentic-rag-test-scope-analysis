@@ -4,11 +4,11 @@ Provides both the modern @tool decorator-based factory functions and
 backwards-compatible class wrappers for tool creation.
 """
 
-from .vector_search import VectorSearchTool, create_vector_search_tool
-from .keyword_search import KeywordSearchTool, create_keyword_search_tool
-from .graph_traverse import GraphTraverseTool, create_graph_traverse_tool
-from .hybrid_search import HybridSearchTool, create_hybrid_search_tool
-from .schemas import (
+from .retrieval.vector_search import VectorSearchTool, create_vector_search_tool
+from .retrieval.keyword_search import KeywordSearchTool, create_keyword_search_tool
+from .retrieval.graph_traverse import GraphTraverseTool, create_graph_traverse_tool
+from .retrieval.hybrid_search import HybridSearchTool, create_hybrid_search_tool
+from .shared.schemas import (
     VectorSearchInput,
     KeywordSearchInput,
     GraphTraverseInput,

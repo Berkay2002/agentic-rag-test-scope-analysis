@@ -225,7 +225,7 @@ def process_search_results(
     Returns:
         List of SearchResult objects (filtered if score_filter_fn provided)
     """
-    from agrag.tools.schemas import SearchResult
+    from agrag.tools.shared.schemas import SearchResult
 
     search_results = []
     for result in raw_results:

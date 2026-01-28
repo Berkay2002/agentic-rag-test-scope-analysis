@@ -9,14 +9,14 @@ import logging
 
 from langchain_core.tools import tool
 
-from agrag.tools.schemas import (
+from agrag.tools.shared.schemas import (
     GraphTraverseInput,
     GraphTraverseOutput,
     GraphPath,
     GraphNode,
     GraphEdge,
 )
-from agrag.tools.base import BaseToolWrapper
+from agrag.tools.shared.base import BaseToolWrapper
 from agrag.storage import Neo4jClient
 from agrag.kg.registry import get_registry
 

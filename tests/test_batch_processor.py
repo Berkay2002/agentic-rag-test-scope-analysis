@@ -3,7 +3,7 @@
 
 import asyncio
 import pytest
-from agrag.cli.batch_processor import BatchProcessor
+from agrag.cli.commands.batch_processor import BatchProcessor
 from agrag.config import settings
 
 

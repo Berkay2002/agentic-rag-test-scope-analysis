@@ -9,18 +9,18 @@ import logging
 
 from langchain_core.tools import tool
 
-from agrag.tools.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
-from agrag.tools.base import (
+from agrag.tools.shared.schemas import VectorSearchInput, VectorSearchOutput, SearchResult
+from agrag.tools.shared.base import (
     BaseToolWrapper,
     format_search_output,
     process_search_results,
 )
-from agrag.tools.diversification import (
+from agrag.tools.enhancements.diversification import (
     MaximalMarginalRelevance,
     ClusteringDiversifier,
     DedupingDiversifier,
 )
-from agrag.tools.search_utils import extract_signal_tokens
+from agrag.tools.shared.search_utils import extract_signal_tokens
 from agrag.storage import PostgresClient
 from agrag.models import get_embedding_service
 from agrag.kg.registry import get_registry
@@ -286,7 +286,7 @@ def create_vector_search_tool(postgres_client: Optional[PostgresClient] = None):
     try:
         from agrag.config.settings import settings
         if hasattr(settings, 'enable_query_expansion') and settings.enable_query_expansion:
-            from agrag.tools.query_expansion import QueryExpansionService
+            from agrag.tools.enhancements.query_expansion import QueryExpansionService
             expansion_service = QueryExpansionService(
                 llm_service=embedding_service.llm if hasattr(embedding_service, 'llm') else None,
                 vector_service=embedding_service

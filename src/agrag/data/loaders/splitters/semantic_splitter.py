@@ -51,7 +51,7 @@ class SemanticSplitter(BaseTextSplitter):
     def embedding_service(self):
         """Lazy load embedding service."""
         if self._embedding_service is None:
-            from agrag.models.embeddings import get_embedding_service
+            from agrag.models.core.embeddings import get_embedding_service
 
             self._embedding_service = get_embedding_service()
         return self._embedding_service

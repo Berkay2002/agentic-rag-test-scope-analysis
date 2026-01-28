@@ -3,7 +3,7 @@
 
 import asyncio
 import json
-from agrag.cli.batch_processor import BatchProcessor
+from agrag.cli.commands.batch_processor import BatchProcessor
 from agrag.config import settings
 
 
@@ -178,7 +178,7 @@ async def main():
         print("❌ Some demonstrations failed!")
 
     print("\nTo use in your application:")
-    print("  from agrag.cli.batch_processor import BatchProcessor")
+    print("  from agrag.cli.commands.batch_processor import BatchProcessor")
     print("  processor = BatchProcessor(thread_id='your-batch')")
     print("  results = await processor.process_queries(queries_with_params)")
 

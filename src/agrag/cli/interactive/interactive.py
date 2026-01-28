@@ -23,15 +23,15 @@ from prompt_toolkit.output import create_output
 from prompt_toolkit.styles import Style
 from rich.console import Console
 
-from agrag.cli.commands import CommandHandler
-from agrag.cli.display import (
+from agrag.cli.commands.commands import CommandHandler
+from agrag.cli.ui.display import (
     print_agent_response,
     print_error,
     print_query_stats,
     print_welcome,
     print_tool_call,
 )
-from agrag.cli.hitl import HITLHandler
+from agrag.cli.interactive.hitl import HITLHandler
 from agrag.cli.utils import extract_message_content
 from agrag.config import settings
 from agrag.core import create_agent_graph, create_initial_state

@@ -8,8 +8,8 @@ import os
 from langchain_core.embeddings import Embeddings
 
 from agrag.config import settings
-from agrag.models.google import create_google_embeddings
-from agrag.models.openai import create_openai_embeddings
+from agrag.models.providers.google import create_google_embeddings
+from agrag.models.providers.openai import create_openai_embeddings
 
 logger = logging.getLogger(__name__)
 

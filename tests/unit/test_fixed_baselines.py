@@ -1,4 +1,4 @@
-from agrag.evaluation.fixed_baselines import run_fixed_graphrag
+from agrag.evaluation.baselines.fixed_baselines import run_fixed_graphrag
 
 
 class _StubHybridTool:

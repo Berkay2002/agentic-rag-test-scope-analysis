@@ -12,13 +12,13 @@ import logging
 
 from langchain_core.tools import tool
 
-from agrag.tools.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
-from agrag.tools.base import (
+from agrag.tools.shared.schemas import KeywordSearchInput, KeywordSearchOutput, SearchResult
+from agrag.tools.shared.base import (
     BaseToolWrapper,
     format_search_output,
     process_search_results,
 )
-from agrag.tools.diversification import (
+from agrag.tools.enhancements.diversification import (
     MaximalMarginalRelevance,
     ClusteringDiversifier,
     DedupingDiversifier,
@@ -209,7 +209,7 @@ def create_keyword_search_tool(postgres_client: Optional[PostgresClient] = None)
     try:
         from agrag.config.settings import settings
         if hasattr(settings, 'enable_query_expansion') and settings.enable_query_expansion:
-            from agrag.tools.query_expansion import QueryExpansionService
+            from agrag.tools.enhancements.query_expansion import QueryExpansionService
             embedding_service = get_embedding_service()
             expansion_service = QueryExpansionService(
                 llm_service=embedding_service.llm if hasattr(embedding_service, 'llm') else None,

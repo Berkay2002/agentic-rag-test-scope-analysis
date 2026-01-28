@@ -33,7 +33,7 @@ def _infer_entity_type_from_id(entity_id: str) -> str | None:
 
 
 def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
-    from agrag.cli.main import _parse_result_ids
+    from agrag.cli.app.main import _parse_result_ids
     from agrag.config.settings import settings
 
     registry = get_registry()
@@ -57,7 +57,7 @@ def run_fixed_rag(query: str, hybrid_tool, k: int = 10) -> List[str]:
 
 
 def run_fixed_graphrag(query: str, hybrid_tool, graph_tool, k: int = 10) -> List[str]:
-    from agrag.cli.main import _parse_graph_result_ids
+    from agrag.cli.app.main import _parse_graph_result_ids
 
     seed_ids = run_fixed_rag(query=query, hybrid_tool=hybrid_tool, k=k)
     graph_ids: List[str] = []

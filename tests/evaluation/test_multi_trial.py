@@ -1,6 +1,6 @@
 import types
 
-from agrag.evaluation.agentic_evaluator import AgenticEvaluator, AgentEvaluationResult
+from agrag.evaluation.evaluators.agentic_evaluator import AgenticEvaluator, AgentEvaluationResult
 
 
 class _DummyGraph:

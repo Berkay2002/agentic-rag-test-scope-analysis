@@ -10,10 +10,10 @@ from typing import Any, Callable, Dict, List, Optional
 from langsmith import Client
 
 from agrag.config import settings
-from agrag.evaluation.entity_extractor import extract_entity_ids
-from agrag.evaluation.metrics import evaluate_retrieval
-from agrag.evaluation.ragas_metrics import RagasEvaluator
-from agrag.evaluation.tool_tracker import ToolTracker
+from agrag.evaluation.utils.entity_extractor import extract_entity_ids
+from agrag.evaluation.metrics.metrics import evaluate_retrieval
+from agrag.evaluation.evaluators.ragas_metrics import RagasEvaluator
+from agrag.evaluation.utils.tool_tracker import ToolTracker
 
 logger = logging.getLogger(__name__)
 

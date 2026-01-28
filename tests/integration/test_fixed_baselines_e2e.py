@@ -2,7 +2,7 @@ from typing import Dict, Tuple
 
 import pytest
 
-from agrag.evaluation.fixed_baselines import run_fixed_graphrag, run_fixed_rag
+from agrag.evaluation.baselines.fixed_baselines import run_fixed_graphrag, run_fixed_rag
 from agrag.tools import create_graph_traverse_tool, create_hybrid_search_tool
 
 

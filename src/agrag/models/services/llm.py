@@ -1,12 +1,10 @@
-"""Factory helpers for provider-backed chat models."""
+"""LLM wrapper for supported chat providers (backwards-compatible import)."""
 
 from typing import Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from agrag.config import settings
-from agrag.models.google import create_google_llm
-from agrag.models.openai import create_openai_llm
+from agrag.models.core.factory import get_llm as _get_llm
 
 
 def get_llm(
@@ -29,18 +27,10 @@ def get_llm(
     Returns:
         Configured chat model
     """
-    provider = (settings.llm_provider or "").lower()
-
-    if provider == "google":
-        return create_google_llm(model=model, temperature=temperature, api_key=api_key)
-
-    if provider == "openai":
-        return create_openai_llm(
-            model=model,
-            temperature=temperature,
-            api_key=api_key,
-            base_url=base_url,
-            organization=organization,
-        )
-
-    raise ValueError(f"Unsupported LLM provider: {provider}")
+    return _get_llm(
+        model=model,
+        temperature=temperature,
+        api_key=api_key,
+        base_url=base_url,
+        organization=organization,
+    )

@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from agrag.kg.ontology import NodeLabel
-from agrag.tools import vector_search as vector_search_module
-from agrag.tools.vector_search import create_vector_search_tool
+from agrag.tools.retrieval import vector_search as vector_search_module
+from agrag.tools.retrieval.vector_search import create_vector_search_tool
 
 
 class _StubEmbeddingService:

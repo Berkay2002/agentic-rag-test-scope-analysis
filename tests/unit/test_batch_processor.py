@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, AsyncMock
 
-from agrag.cli.batch_processor import (
+from agrag.cli.commands.batch_processor import (
     BatchQueryProcessor,
     QueryResult,
     load_queries_from_file,

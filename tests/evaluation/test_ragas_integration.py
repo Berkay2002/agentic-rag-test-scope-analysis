@@ -1,6 +1,6 @@
 import pytest
 
-from agrag.evaluation.ragas_metrics import RagasEvaluator
+from agrag.evaluation.evaluators.ragas_metrics import RagasEvaluator
 
 
 class _DummyEmbeddingService:
@@ -9,13 +9,13 @@ class _DummyEmbeddingService:
 
 @pytest.fixture
 def ragas_evaluator(monkeypatch):
-    monkeypatch.setattr("agrag.evaluation.ragas_metrics.get_llm", lambda **_: object())
+    monkeypatch.setattr("agrag.evaluation.evaluators.ragas_metrics.get_llm", lambda **_: object())
     monkeypatch.setattr(
-        "agrag.evaluation.ragas_metrics.get_embedding_service",
+        "agrag.evaluation.evaluators.ragas_metrics.get_embedding_service",
         lambda: _DummyEmbeddingService(),
     )
     monkeypatch.setattr(
-        "agrag.evaluation.ragas_metrics.Dataset.from_dict",
+        "agrag.evaluation.evaluators.ragas_metrics.Dataset.from_dict",
         lambda data: data,
     )
     return RagasEvaluator(model_name="dummy", max_retries=3, api_key="test")

@@ -17,7 +17,7 @@ except ImportError:
         raise ImportError("scikit-learn is required for diversification. Install with: pip install scikit-learn")
     KMeans = None
 
-from agrag.tools.schemas import SearchResult
+from agrag.tools.shared.schemas import SearchResult
 
 logger = logging.getLogger(__name__)
 

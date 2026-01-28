@@ -2,7 +2,7 @@
 """Test script for headless mode with parameters."""
 
 import asyncio
-from agrag.cli.headless import run_headless
+from agrag.cli.commands.headless import run_headless
 from agrag.config import settings
 
 

@@ -10,10 +10,10 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from agrag.cli.thinking import handle_thinking_command, format_thinking_setting
+from agrag.cli.interactive.thinking import handle_thinking_command, format_thinking_setting
 
 # Import colors from display module
-from agrag.cli.display import COLORS
+from agrag.cli.ui.display import COLORS
 
 
 class ChatSessionProtocol(Protocol):

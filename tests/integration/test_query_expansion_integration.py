@@ -4,16 +4,16 @@ import pytest
 from unittest.mock import Mock, patch
 from typing import List, Dict, Any
 
-from agrag.tools.query_expansion import (
+from agrag.tools.enhancements.query_expansion import (
     SynonymExpander,
     LLMBasedExpander,
     PseudoRelevanceExpander,
     QueryExpansionService,
 )
-from agrag.tools.schemas import SearchResult
-from agrag.evaluation.expansion_metrics import calculate_expansion_metrics
-from agrag.tools.vector_search import _execute_multi_query_search as _vector_multi_query
-from agrag.tools.keyword_search import _execute_multi_query_search as _keyword_multi_query
+from agrag.tools.shared.schemas import SearchResult
+from agrag.evaluation.metrics.expansion_metrics import calculate_expansion_metrics
+from agrag.tools.retrieval.vector_search import _execute_multi_query_search as _vector_multi_query
+from agrag.tools.retrieval.keyword_search import _execute_multi_query_search as _keyword_multi_query
 from agrag.config.settings import settings
 
 
@@ -313,7 +313,7 @@ class TestMultiQuerySearch:
     def test_multi_query_keyword_search(self, postgres_client, monkeypatch):
         """Test keyword search with multiple query variants."""
         # We need to mock the process_search_results function as well
-        from agrag.tools.keyword_search import process_search_results
+        from agrag.tools.retrieval.keyword_search import process_search_results
 
         # Mock process_search_results to return SearchResult objects with content_id
         original_process = process_search_results
@@ -334,7 +334,7 @@ class TestMultiQuerySearch:
                 results.append(result)
             return results
 
-        monkeypatch.setattr('agrag.tools.keyword_search.process_search_results', mock_process)
+        monkeypatch.setattr('agrag.tools.retrieval.keyword_search.process_search_results', mock_process)
 
         # Mock keyword search
         search_results = [
@@ -436,7 +436,7 @@ class TestSearchToolIntegration:
 
         try:
             # Create search tool with expansion enabled
-            from agrag.tools.vector_search import create_vector_search_tool
+            from agrag.tools.retrieval.vector_search import create_vector_search_tool
             tool = create_vector_search_tool()
 
             # Verify tool was created successfully
@@ -447,7 +447,7 @@ class TestSearchToolIntegration:
 
     def test_keyword_search_with_expansion(self):
         """Test keyword search tool with query expansion."""
-        from agrag.tools.keyword_search import create_keyword_search_tool
+        from agrag.tools.retrieval.keyword_search import create_keyword_search_tool
 
         # Temporarily enable expansion
         original_setting = getattr(settings, 'enable_query_expansion', False)

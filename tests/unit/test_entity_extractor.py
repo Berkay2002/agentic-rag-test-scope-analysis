@@ -1,4 +1,4 @@
-from agrag.evaluation.entity_extractor import extract_entity_ids, extract_entity_ids_detailed
+from agrag.evaluation.utils.entity_extractor import extract_entity_ids, extract_entity_ids_detailed
 
 
 def test_extracts_v1_entity_ids() -> None:

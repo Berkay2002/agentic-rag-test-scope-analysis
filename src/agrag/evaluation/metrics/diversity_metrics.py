@@ -2,7 +2,7 @@
 
 from typing import List
 import numpy as np
-from agrag.tools.schemas import SearchResult
+from agrag.tools.shared.schemas import SearchResult
 
 
 def calculate_diversity_metrics(results: List[SearchResult]) -> dict:

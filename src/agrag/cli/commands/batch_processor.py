@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from dataclasses import dataclass, asdict
 
-from agrag.cli.headless import run_headless
+from agrag.cli.commands.headless import run_headless
 
 
 logger = logging.getLogger(__name__)

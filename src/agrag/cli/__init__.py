@@ -1,5 +1,5 @@
 """CLI application."""
 
-from .main import cli
+from .app.main import cli
 
 __all__ = ["cli"]

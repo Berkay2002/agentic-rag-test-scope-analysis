@@ -9,7 +9,7 @@ from psycopg import OperationalError, DatabaseError
 from agrag.storage import Neo4jClient, PostgresClient
 from agrag.storage.retry_decorators import resilient_db_operation, with_fallback
 from agrag.observability.metrics import ErrorMetrics
-from agrag.tools.hybrid_search import _hybrid_search_core, _keyword_only_search
+from agrag.tools.retrieval.hybrid_search import _hybrid_search_core, _keyword_only_search
 
 
 logger = logging.getLogger(__name__)

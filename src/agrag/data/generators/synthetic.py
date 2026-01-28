@@ -17,7 +17,7 @@ from agrag.kg.ontology import (
     Class,
     Module,
 )
-from agrag.models.embeddings import get_embedding_service
+from agrag.models.core.embeddings import get_embedding_service
 import logging
 
 logger = logging.getLogger(__name__)

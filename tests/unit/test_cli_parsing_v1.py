@@ -1,4 +1,4 @@
-from agrag.cli import main as cli_main
+from agrag.cli.app import main as cli_main
 
 
 def test_parse_result_ids_includes_v1_entities() -> None:

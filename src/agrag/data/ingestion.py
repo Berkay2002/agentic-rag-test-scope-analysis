@@ -11,7 +11,7 @@ from agrag.storage.neo4j_client import Neo4jClient
 from agrag.storage.postgres_client import PostgresClient
 from agrag.storage.bm25_retriever import BM25RetrieverManager
 from agrag.data.storage_writers import PostgresWriter, BM25Writer
-from agrag.models.embeddings import get_embedding_service
+from agrag.models.core.embeddings import get_embedding_service
 from agrag.kg.adapter import SourceAdapter
 from agrag.kg.registry import get_registry
 

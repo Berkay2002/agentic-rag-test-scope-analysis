@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 
 from agrag.config import settings
-from agrag.evaluation.langsmith_evaluator import LangSmithEvaluator
+from agrag.evaluation.evaluators.langsmith_evaluator import LangSmithEvaluator
 
 
 @pytest.mark.skipif(

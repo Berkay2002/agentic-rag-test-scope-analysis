@@ -1,6 +1,6 @@
 """Evaluation metrics and utilities."""
 
-from .metrics import (
+from .metrics.metrics import (
     precision_at_k,
     recall_at_k,
     f1_score_at_k,
@@ -12,36 +12,36 @@ from .metrics import (
     log_metrics,
 )
 
-from .entity_extractor import (
+from .utils.entity_extractor import (
     extract_entity_ids,
     extract_entity_ids_detailed,
     extract_from_tool_results,
     ExtractionResult,
 )
 
-from .tool_tracker import (
+from .utils.tool_tracker import (
     ToolCall,
     ToolUsageStats,
     AggregateToolStats,
     ToolTracker,
 )
 
-from .agentic_evaluator import (
+from .evaluators.agentic_evaluator import (
     AgentEvaluationResult,
     AgentEvaluationSummary,
     AgenticEvaluator,
     create_evaluation_graph,
 )
 
-from .diversity_metrics import (
+from .metrics.diversity_metrics import (
     calculate_diversity_metrics,
 )
 
-from .expansion_metrics import (
+from .metrics.expansion_metrics import (
     calculate_expansion_metrics,
 )
 
-from .langsmith_evaluator import (
+from .evaluators.langsmith_evaluator import (
     LangSmithEvaluator,
 )
 

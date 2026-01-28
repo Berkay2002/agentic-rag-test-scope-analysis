@@ -20,8 +20,8 @@ from ragas.metrics.collections import (
 )
 
 from agrag.config import settings
-from agrag.models.embeddings import get_embedding_service
-from agrag.models.llm import get_llm
+from agrag.models.core.embeddings import get_embedding_service
+from agrag.models.services.llm import get_llm
 
 logger = logging.getLogger(__name__)
 

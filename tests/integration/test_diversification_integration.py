@@ -5,7 +5,7 @@ import pytest
 from typing import List, Dict, Any
 from unittest.mock import MagicMock
 
-from agrag.tools.schemas import SearchResult as BaseSearchResult
+from agrag.tools.shared.schemas import SearchResult as BaseSearchResult
 from pydantic import Field
 from typing import Optional, List as ListType
 
@@ -17,14 +17,14 @@ class SearchResult(BaseSearchResult):
         default=None,
         description="Vector embedding for similarity calculations"
     )
-from agrag.tools.diversification import (
+from agrag.tools.enhancements.diversification import (
     MaximalMarginalRelevance,
     ClusteringDiversifier,
     DedupingDiversifier,
 )
-from agrag.tools.vector_search import create_vector_search_tool
-from agrag.tools.keyword_search import create_keyword_search_tool
-from agrag.tools.hybrid_search import create_hybrid_search_tool
+from agrag.tools.retrieval.vector_search import create_vector_search_tool
+from agrag.tools.retrieval.keyword_search import create_keyword_search_tool
+from agrag.tools.retrieval.hybrid_search import create_hybrid_search_tool
 
 
 class MockEmbeddingService:

@@ -14,7 +14,7 @@ import subprocess
 from unittest.mock import patch, MagicMock
 
 from agrag.batch.processor import BatchQueryProcessor
-from agrag.cli.batch_processor import load_queries_from_file, save_results_to_file, BatchQueryProcessor as CLIBatchProcessor
+from agrag.cli.commands.batch_processor import load_queries_from_file, save_results_to_file, BatchQueryProcessor as CLIBatchProcessor
 
 
 class TestBatchWorkflow:

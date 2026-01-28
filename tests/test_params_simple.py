@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Simple test for parameter handling without requiring API calls."""
 
-from agrag.cli.headless import run_headless
+from agrag.cli.commands.headless import run_headless
 from agrag.config import settings
 
 

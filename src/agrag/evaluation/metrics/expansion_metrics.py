@@ -2,7 +2,7 @@
 
 import logging
 from typing import List, Dict, Any
-from agrag.tools.schemas import SearchResult
+from agrag.tools.shared.schemas import SearchResult
 
 try:
     import Levenshtein

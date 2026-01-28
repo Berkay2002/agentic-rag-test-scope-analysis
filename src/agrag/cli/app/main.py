@@ -78,7 +78,7 @@ def cli(
         logger.info("AgRAG CLI initialized")
         return
 
-    from agrag.cli.headless import build_prompt, read_stdin, run_headless
+    from agrag.cli.commands.headless import build_prompt, read_stdin, run_headless
 
     stdin_text = read_stdin()
     if prompt or stdin_text:
@@ -163,7 +163,7 @@ def chat(
       agrag chat --yolo                    # YOLO mode - autonomous execution
       agrag chat --verbose                 # Show tool call details
     """
-    from agrag.cli.interactive import start_interactive_chat
+    from agrag.cli.interactive.interactive import start_interactive_chat
 
     try:
         start_interactive_chat(
@@ -458,7 +458,7 @@ def evaluate(
         mean_average_precision,
         mean_reciprocal_rank,
     )
-    from agrag.evaluation.fixed_baselines import run_fixed_graphrag, run_fixed_rag
+    from agrag.evaluation.baselines.fixed_baselines import run_fixed_graphrag, run_fixed_rag
     from agrag.tools import VectorSearchTool, KeywordSearchTool, HybridSearchTool, GraphTraverseTool
     from agrag.storage import Neo4jClient, PostgresClient, BM25RetrieverManager
     from datetime import datetime
@@ -1067,7 +1067,7 @@ def _execute_graph_traversal(tool, query: str, k: int, query_data: Optional[dict
                 metadata_filter={"entity_type": test_case_label},
             )
             if keyword_results:
-                from agrag.tools.search_utils import extract_signal_tokens
+                from agrag.tools.shared.search_utils import extract_signal_tokens
 
                 signal_tokens = [token.lower() for token in extract_signal_tokens(query)]
 
@@ -1278,8 +1278,8 @@ def _run_agent_evaluation(
         verbose: Whether to show per-query progress
     """
     import json
-    from agrag.cli.display import format_summary_table
-    from agrag.evaluation.agentic_evaluator import (
+    from agrag.cli.ui.display import format_summary_table
+    from agrag.evaluation.evaluators.agentic_evaluator import (
         AgenticEvaluator,
         create_evaluation_graph,
     )
