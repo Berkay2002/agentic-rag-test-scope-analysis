@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     langsmith_dataset_version: str = "v1"
     langsmith_max_concurrency: int = 10
 
+    # LLM Provider
+    llm_provider: str = "google"  # "google" or "openai"
+
+    # Embeddings Provider
+    embeddings_provider: str = "google"  # "google" or "openai"
+
     # Google Generative AI
     google_api_key: Optional[str] = None
     google_model: str = "gemini-3-flash-preview"
@@ -51,6 +57,18 @@ class Settings(BaseSettings):
     google_thinking_budget: Optional[int] = None
     embedding_dimensions: int = 768
     llm_timeout_seconds: int = 120
+
+    # OpenAI-compatible (chat completions)
+    openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: Optional[str] = None
+    openai_organization: Optional[str] = None
+
+    # OpenAI-compatible embeddings
+    openai_embedding_api_key: Optional[str] = None
+    openai_embedding_model: str = "text-embedding-3-small"
+    openai_embedding_base_url: Optional[str] = None
+    openai_embedding_organization: Optional[str] = None
 
     # Neo4j Configuration
     neo4j_uri: Optional[str] = None
@@ -115,8 +133,25 @@ class Settings(BaseSettings):
 
     def validate_llm_config(self) -> None:
         """Validate LLM configuration."""
-        if not self.google_api_key:
-            raise ValueError("GOOGLE_API_KEY must be set")
+        provider = (self.llm_provider or "").lower()
+        if provider == "google":
+            if not self.google_api_key:
+                raise ValueError("GOOGLE_API_KEY must be set")
+        elif provider == "openai":
+            if not self.openai_api_key:
+                raise ValueError("OPENAI_API_KEY must be set")
+        else:
+            raise ValueError("LLM_PROVIDER must be 'google' or 'openai'")
+
+        embeddings_provider = (self.embeddings_provider or "").lower()
+        if embeddings_provider == "google":
+            if not self.google_api_key:
+                raise ValueError("GOOGLE_API_KEY must be set for embeddings")
+        elif embeddings_provider == "openai":
+            if not (self.openai_embedding_api_key or self.openai_api_key):
+                raise ValueError("OPENAI_API_KEY or OPENAI_EMBEDDING_API_KEY must be set")
+        else:
+            raise ValueError("EMBEDDINGS_PROVIDER must be 'google' or 'openai'")
 
     def validate_database_config(self) -> None:
         """Validate database configuration."""
@@ -154,6 +189,36 @@ class Settings(BaseSettings):
             and self.langsmith_endpoint
         ):
             self.langchain_endpoint = self.langsmith_endpoint
+
+    @property
+    def llm_model(self) -> str:
+        """Return the active chat model name for the configured provider."""
+        provider = (self.llm_provider or "").lower()
+        return self.google_model if provider == "google" else self.openai_model
+
+    @property
+    def llm_identity(self) -> str:
+        """Return a provider-scoped identifier for display/logging."""
+        provider = (self.llm_provider or "").lower()
+        return f"{provider}:{self.llm_model}"
+
+    @field_validator("llm_provider")
+    @classmethod
+    def validate_llm_provider(cls, value: str) -> str:
+        """Ensure LLM provider is supported."""
+        normalized = (value or "").lower()
+        if normalized not in {"google", "openai"}:
+            raise ValueError("LLM_PROVIDER must be 'google' or 'openai'")
+        return normalized
+
+    @field_validator("embeddings_provider")
+    @classmethod
+    def validate_embeddings_provider(cls, value: str) -> str:
+        """Ensure embeddings provider is supported."""
+        normalized = (value or "").lower()
+        if normalized not in {"google", "openai"}:
+            raise ValueError("EMBEDDINGS_PROVIDER must be 'google' or 'openai'")
+        return normalized
 
     @field_validator("google_thinking_level")
     @classmethod

@@ -256,7 +256,7 @@ def call_model(
                     timeout,
                 )
                 raise TimeoutError(
-                    f"LLM call timed out after {timeout}s. Verify GOOGLE_API_KEY connectivity."
+                    f"LLM call timed out after {timeout}s. Verify LLM endpoint and API key."
                 ) from exc
     else:
         response = _invoke()

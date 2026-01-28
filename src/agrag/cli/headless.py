@@ -256,7 +256,7 @@ def run_headless(
                 "type": "init",
                 "timestamp": _iso_timestamp(),
                 "session_id": session_id,
-                "model": settings.google_model,
+                "model": settings.llm_identity,
             }
         )
         _emit_json_event(
@@ -350,7 +350,7 @@ def run_headless(
     duration_ms = round((time.monotonic() - start_time) * 1000)
     stats_payload = {
         "models": {
-            settings.google_model: {
+            settings.llm_identity: {
                 "api": {
                     "totalRequests": model_calls,
                     "totalErrors": 1 if error else 0,

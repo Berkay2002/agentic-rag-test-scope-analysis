@@ -1404,14 +1404,21 @@ def info():
 
     # LLM config
     click.echo("[LLM]")
-    click.echo(f"  Model: {settings.google_model}")
+    click.echo(f"  Provider: {settings.llm_provider}")
+    click.echo(f"  Model: {settings.llm_model}")
+    if settings.llm_provider == "openai" and settings.openai_base_url:
+        click.echo(f"  Base URL: {settings.openai_base_url}")
     click.echo(f"  Temperature: {settings.agent_temperature}")
     click.echo(f"  Max tool calls: {settings.max_tool_calls}")
     click.echo(f"  Max model calls: {settings.max_model_calls}")
 
     # Embedding config
     click.echo("\n[Embeddings]")
-    click.echo(f"  Model: {settings.google_embedding_model}")
+    click.echo(f"  Provider: {settings.embeddings_provider}")
+    if settings.embeddings_provider == "google":
+        click.echo(f"  Model: {settings.google_embedding_model}")
+    else:
+        click.echo(f"  Model: {settings.openai_embedding_model}")
     click.echo(f"  Dimensions: {settings.embedding_dimensions}")
 
     # Neo4j config
